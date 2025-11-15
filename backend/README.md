@@ -149,3 +149,11 @@ scripts/data-prep/
 # License
 
 Only Unfinitas team :))
+
+LLM:
+
+For each regulation clause (R1 ... Rn):
+1. Embed regulation clause → vector
+2. Vector search MOE paragraphs → top 20
+3. LLM rerank → top 3–5 relevant paragraphs
+4. LLM judge → compliance JSON

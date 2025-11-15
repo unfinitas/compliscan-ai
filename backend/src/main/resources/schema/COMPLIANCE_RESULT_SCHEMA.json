@@ -1,0 +1,45 @@
+{
+  "type": "object",
+  "properties": {
+    "requirement_id": {
+      "type": "string",
+      "description": "MUST be the exact 'id' field from the input requirement"
+    },
+    "compliance_status": {
+      "type": "string",
+      "enum": ["full", "partial", "non"],
+      "description": "Overall compliance status"
+    },
+    "finding_level": {
+      "type": "string",
+      "enum": ["Level 1", "Level 2", "Observation", "Recommendation"],
+      "description": "Severity level of finding"
+    },
+    "justification": {
+      "type": "string",
+      "description": "Brief justification (max 200 chars)"
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "moe_paragraph_id": { "type": "integer" },
+          "relevant_excerpt": { "type": "string" },
+          "similarity_score": { "type": "number" },
+          "rerank_score": { "type": "number" }
+        },
+        "required": ["moe_paragraph_id", "relevant_excerpt", "similarity_score", "rerank_score"]
+      }
+    },
+    "missing_elements": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "recommended_actions": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "required": ["requirement_id", "compliance_status", "finding_level", "justification"]
+}

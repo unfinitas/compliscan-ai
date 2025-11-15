@@ -78,7 +78,7 @@ public class ComplianceAnalysisEngine {
             log.info("Loaded {} paragraphs and {} Part-145 Section A clauses (filtered from {} total)",
                     moeParagraphs.size(), clauses.size(), allClauses.size());
 
-            // Stage 1: Semantic Analysis
+            // Stage 1: Semantic Analysis (now LLM-augmented)
             log.info("Stage 1/4: Semantic matching");
             final SemanticAnalyzer.SemanticAnalysisResult semanticResult = semanticAnalyzer.analyze(
                     moeParagraphs,
@@ -212,11 +212,11 @@ public class ComplianceAnalysisEngine {
             final AnalysisResult analysis,
             final ClauseMatchResult matchResult) {
 
-        // Determine status
+        // IMPORTANT: bestSimilarity is now a compliance-like score (0.0, 0.5, 1.0)
         final CoverageStatus status = classifyMatch(matchResult.bestSimilarity());
 
-        // Extract evidence
-        final String evidence = matchResult.matches().stream()
+        // Concrete MOE evidence (section numbers + similarity) for traceability
+        final String moeEvidence = matchResult.matches().stream()
                 .limit(3)
                 .map(m -> {
                     final String sectionNum = m.paragraph().getSection() != null
@@ -226,7 +226,7 @@ public class ComplianceAnalysisEngine {
                 })
                 .collect(Collectors.joining(", "));
 
-        // Get matched paragraphs
+        // Get matched paragraphs for UI / drilldown
         final List<Paragraph> paragraphs = matchResult.matches().stream()
                 .limit(5)
                 .map(ParagraphMatch::paragraph)
@@ -237,6 +237,10 @@ public class ComplianceAnalysisEngine {
                 ? MatchType.AGGREGATE
                 : MatchType.SINGLE;
 
+        // LLM-based explanation & findings are stored in ClauseMatchResult#evidence()
+        // (as built by SemanticAnalyzer.buildEvidenceFromCompliance)
+        final String explanation = matchResult.evidence();
+
         return CoverageResult.builder()
                 .analysisResult(analysis)
                 .clauseId(matchResult.clauseId())
@@ -245,26 +249,17 @@ public class ComplianceAnalysisEngine {
                 .similarity(BigDecimal.valueOf(matchResult.bestSimilarity()))
                 .matchType(matchType)
                 .matchedParagraphs(paragraphs)
-                .moeExcerpt(evidence)
-                .explanation(generateExplanation(matchResult, status))
+                .moeExcerpt(moeEvidence)          // short MOE pointer
+                .explanation(explanation)         // rich LLM explanation + gaps + actions
                 .build();
     }
 
-    private CoverageStatus classifyMatch(final double similarity) {
-        if (similarity >= 0.75) return CoverageStatus.COVERED;
-        if (similarity >= 0.40) return CoverageStatus.PARTIAL;
+    private CoverageStatus classifyMatch(final double similarityScore) {
+        // similarityScore is now a normalized compliance score in [0,1],
+        // typically: 1.0 = full, 0.5 = partial, 0.0 = non.
+        if (similarityScore >= 0.75) return CoverageStatus.COVERED;
+        if (similarityScore >= 0.40) return CoverageStatus.PARTIAL;
         return CoverageStatus.MISSING;
-    }
-
-    private String generateExplanation(final ClauseMatchResult match, final CoverageStatus status) {
-        return switch (status) {
-            case COVERED -> "Requirement adequately addressed in MOE";
-            case PARTIAL -> String.format(
-                    "Partially addressed (%.0f%% match) - review for completeness",
-                    match.bestSimilarity() * 100
-            );
-            case MISSING -> "Requirement not found in MOE - must be documented";
-        };
     }
 
     private BigDecimal calculateComplianceScore(final int covered, final int partial, final int missing, final int total) {
