@@ -50,7 +50,7 @@ export async function uploadFile<T>(
   moeId: string | null,
   url: string,
   formData: FormData
-): Promise<ApiResponse<T>> {
+): Promise<T> {
   const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? "";
   const fullUrl = url.startsWith("http")
     ? url
@@ -90,7 +90,7 @@ export async function sendRequestWithResponse<T>(
   method: RequestEnum,
   url: string,
   data?: object
-): Promise<ApiResponse<T>> {
+): Promise<T> {
   const response = await sendRequest(moeId, method, url, data);
 
   if (!response.ok) {

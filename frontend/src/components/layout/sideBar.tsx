@@ -50,11 +50,14 @@ const CustomSidebarLink = ({
   const isActive = pathname === link.href;
   const showIndicator = open || !animate;
 
+  const isCollapsed = animate && !open;
+
   return (
     <Link
       href={link.href}
       className={cn(
-        "flex items-center justify-start gap-2 group/sidebar py-2 rounded-lg px-2",
+        "flex items-center gap-2 group/sidebar py-2 rounded-lg px-2 transition-all",
+        isCollapsed ? "justify-center" : "justify-start",
         isActive && showIndicator
           ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30"
           : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",

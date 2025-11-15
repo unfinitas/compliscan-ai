@@ -22,7 +22,7 @@ import java.nio.file.StandardCopyOption;
 public class PdfBoxParser implements PdfParser {
 
     @Override
-    public ParsedPdfResult parse(InputStream inputStream, String fileName) {
+    public ParsedPdfResult parse(final InputStream inputStream, final String fileName) {
         log.debug("Starting PDF parsing for file: {}", fileName);
 
         Path tempFile = null;
@@ -32,24 +32,24 @@ public class PdfBoxParser implements PdfParser {
             Files.copy(inputStream, tempFile, StandardCopyOption.REPLACE_EXISTING);
 
             // Load PDF from file (memory-efficient)
-            try (PDDocument document = Loader.loadPDF(tempFile.toFile())) {
+            try (final PDDocument document = Loader.loadPDF(tempFile.toFile())) {
                 // Extract text content
-                PDFTextStripper stripper = new PDFTextStripper();
-                String rawText = stripper.getText(document);
+                final PDFTextStripper stripper = new PDFTextStripper();
+                final String rawText = stripper.getText(document);
 
                 // Extract metadata
-                int pageCount = document.getNumberOfPages();
-                PDDocumentInformation info = document.getDocumentInformation();
+                final int pageCount = document.getNumberOfPages();
+                final PDDocumentInformation info = document.getDocumentInformation();
 
-                String title = info.getTitle();
-                String author = info.getAuthor();
+                final String title = info.getTitle();
+                final String author = info.getAuthor();
 
                 log.debug("PDF parsing completed. File: {}, Pages: {}, Text length: {}",
                         fileName, pageCount, rawText.length());
 
                 return new ParsedPdfResult(rawText, pageCount, title, author);
             }
-        } catch (IOException e) {
+        } catch (final IOException e) {
             log.error("Failed to parse PDF file: {}", fileName, e);
             throw new DocumentProcessingException("Failed to parse PDF file: " + fileName, e);
         } finally {
@@ -58,7 +58,7 @@ public class PdfBoxParser implements PdfParser {
                 try {
                     Files.deleteIfExists(tempFile);
                     log.debug("Temporary file deleted: {}", tempFile);
-                } catch (IOException e) {
+                } catch (final IOException e) {
                     log.warn("Failed to delete temporary file: {}", tempFile, e);
                 }
             }

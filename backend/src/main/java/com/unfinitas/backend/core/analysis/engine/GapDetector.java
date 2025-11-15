@@ -112,7 +112,7 @@ public class GapDetector {
         } else {
             actions.add("Expand existing content in sections: " +
                     match.matches().stream()
-                            .map(m -> m.paragraph().getSectionNumber())
+                            .map(m -> m.paragraph().getSection().getSectionNumber())
                             .distinct()
                             .limit(3)
                             .collect(Collectors.joining(", ")));

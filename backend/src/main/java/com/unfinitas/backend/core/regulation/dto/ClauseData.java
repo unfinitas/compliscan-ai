@@ -6,6 +6,7 @@ public record ClauseData(
         String content,
         String linkedTo,
         String type,
-        Integer displayOrder
-) {
-}
+        Integer displayOrder,
+        String parentClause,
+        Integer clauseNumber
+) {}

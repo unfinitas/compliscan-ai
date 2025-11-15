@@ -161,7 +161,7 @@ public class ComplianceAnalysisEngine {
         final String evidence = matchResult.matches().stream()
                 .limit(3)
                 .map(m -> String.format("Section %s (%.0f%%)",
-                        m.paragraph().getSectionNumber(),
+                        m.paragraph().getSection().getSectionNumber(),
                         m.similarity() * 100))
                 .collect(Collectors.joining(", "));
 

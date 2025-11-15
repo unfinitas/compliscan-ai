@@ -17,7 +17,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.File;
 import java.io.FileOutputStream;
-import java.time.LocalDateTime;
 
 @Service
 @Slf4j
@@ -49,10 +48,35 @@ public class RegulationLoaderService {
 
     private void loadFromResources() throws Exception {
         final PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
-        final Resource[] xmlResources = resolver.getResources("classpath:regulation-data/xml/*.xml");
+        final Resource[] xmlResources = resolver.getResources("classpath:regulation-data/pdf/*.pdf");
 
         for (final Resource resource : xmlResources) {
-            loadFromXml(resource);
+            loadFromPdf(resource);
+        }
+    }
+
+    private void loadFromPdf(final Resource resource) throws Exception {
+        log.info("Loading from PDF: {}", resource.getFilename());
+
+        final File tempFile = File.createTempFile("regulation", ".pdf");
+        try {
+            resource.getInputStream().transferTo(new FileOutputStream(tempFile));
+
+            final long startTime = System.currentTimeMillis();
+            final RegulationData data = xmlParser.parseXml(tempFile.getAbsolutePath());
+            //
+            final long parseTime = System.currentTimeMillis() - startTime;
+
+            log.info("Parsed {} clauses in {}ms", data.clauses().size(), parseTime);
+
+            final Regulation regulation = mapToEntity(data);
+            regulationRepo.save(regulation);
+
+            final long totalTime = System.currentTimeMillis() - startTime;
+            log.info("Loaded: {} {} ({} clauses) in {}ms",
+                    data.code(), data.version(), data.clauses().size(), totalTime);
+        } finally {
+            tempFile.delete();
         }
     }
 
@@ -79,7 +103,10 @@ public class RegulationLoaderService {
             tempFile.delete();
         }
     }
-
+    /**
+     * Corrected mapToEntity method.
+     * This maps the DTOs from the parser to your JPA entities.
+     */
     private Regulation mapToEntity(final RegulationData data) {
         final Regulation regulation = Regulation.builder()
                 .code(data.code())
@@ -87,7 +114,6 @@ public class RegulationLoaderService {
                 .name(data.name())
                 .effectiveDate(data.effectiveDate())
                 .active(true)
-                .createdAt(LocalDateTime.now())
                 .build();
 
         int order = 0;
@@ -100,6 +126,7 @@ public class RegulationLoaderService {
                     .clauseType(clauseData.type())
                     .displayOrder(clauseData.displayOrder() != null ? clauseData.displayOrder() : order)
                     .clauseNumber(order++)
+                    .regulationVersion(data.version())
                     .build();
 
             regulation.addClause(clause);

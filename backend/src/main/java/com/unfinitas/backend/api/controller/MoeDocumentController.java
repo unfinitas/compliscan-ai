@@ -1,19 +1,27 @@
 package com.unfinitas.backend.api.controller;
 
+import java.util.UUID;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
 import com.unfinitas.backend.api.dto.DocumentStatusResponse;
 import com.unfinitas.backend.api.dto.MoeIngestResponse;
 import com.unfinitas.backend.core.ingestion.model.MoeDocument;
 import com.unfinitas.backend.core.ingestion.repository.MoeDocumentRepository;
 import com.unfinitas.backend.core.ingestion.repository.ParagraphRepository;
 import com.unfinitas.backend.core.ingestion.service.MoeIngestionService;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
-
-import java.util.UUID;
 
 /**
  * REST API Controller for MOE document management
@@ -21,6 +29,7 @@ import java.util.UUID;
 @Slf4j
 @RestController
 @RequestMapping("/api/moe/documents")
+@CrossOrigin(origins = "*")
 @RequiredArgsConstructor
 public class MoeDocumentController {
 
@@ -45,7 +54,6 @@ public class MoeDocumentController {
         int paragraphCount = (int) paragraphRepository.countByMoeDocumentId(document.getId());
         MoeIngestResponse response = MoeIngestResponse.from(document, paragraphCount);
 
-        log.info("Document upload initiated: {}", document.getId());
 
         return ResponseEntity
                 .status(HttpStatus.ACCEPTED)

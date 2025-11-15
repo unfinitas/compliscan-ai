@@ -9,10 +9,10 @@ import {
   DropzoneEmptyState,
 } from "@/components/ui/shadcn-io/dropzone";
 import { HoverBorderGradient } from "@/components/ui/hover-border-gradient";
+import { Spinner } from "@/components/ui/shadcn-io/spinner";
 import type { FileRejection } from "react-dropzone";
-import { uploadDocument, getDocumentStatus } from "@/api/upload/documentApi";
+import { uploadDocument } from "@/api/upload/documentApi";
 import { useMoeId } from "@/utils/moeStore";
-import { ProcessingStatus } from "@/api/model/ProcessingStatus";
 
 export function FileUpload() {
   const { toast } = useToast();
@@ -50,35 +50,18 @@ export function FileUpload() {
 
           const response = await uploadDocument(selectedFile, null);
 
-          if (
-            response.status === "success" ||
-            response.status === "SUCCESS" ||
-            response.data
-          ) {
-            // Store the document ID (moeId) in Redux
-            setMoeId(response.data.documentId);
-            setDocumentId(response.data.documentId);
+          // Store the document ID (moeId) in Redux
+          setMoeId(response.documentId);
+          setDocumentId(response.documentId);
 
-            setIsUploading(false);
-            setIsUploaded(true);
-            setUploadProgress(100);
+          setIsUploading(false);
+          setIsUploaded(true);
+          setUploadProgress(100);
 
-            toast({
-              title: "File uploaded successfully!",
-              description: `${selectedFile.name} has been uploaded and processing has started.`,
-            });
-          } else {
-            setIsUploading(false);
-            setIsUploaded(false);
-            setUploadProgress(0);
-            setFile(null);
-
-            toast({
-              title: "Upload failed",
-              description: response.message || "Failed to upload file",
-              variant: "destructive",
-            });
-          }
+          toast({
+            title: "File uploaded successfully!",
+            description: `${selectedFile.name} has been uploaded and processing has started.`,
+          });
         } catch (error) {
           setIsUploading(false);
           setIsUploaded(false);
@@ -104,60 +87,26 @@ export function FileUpload() {
     setIsAnalyzing(true);
     setAnalyzeProgress(0);
 
-    const pollStatus = async () => {
-      try {
-        const response = await getDocumentStatus(documentId, null);
-
-        if (
-          response.status === "success" ||
-          response.status === "SUCCESS" ||
-          response.data
-        ) {
-          const status = response.data;
-
-          if (status.status === ProcessingStatus.COMPLETED) {
-            setAnalyzeProgress(100);
-            setIsAnalyzing(false);
-            toast({
-              title: "Analysis complete!",
-              description: `Document processed successfully with ${status.paragraphCount} paragraphs.`,
-            });
-          } else if (status.status === ProcessingStatus.FAILED) {
-            setIsAnalyzing(false);
-            toast({
-              title: "Analysis failed",
-              description: status.errorMessage || "Failed to process document",
-              variant: "destructive",
-            });
-          } else if (status.status === ProcessingStatus.PROCESSING) {
-            if (status.paragraphCount > 0) {
-              setAnalyzeProgress(Math.min(90, status.paragraphCount * 2));
-            } else {
-              setAnalyzeProgress(10);
-            }
-            setTimeout(pollStatus, 2000);
-          }
-        } else {
+    // Simulate analysis for 5 seconds
+    const interval = setInterval(() => {
+      setAnalyzeProgress((prev) => {
+        if (prev >= 100) {
+          clearInterval(interval);
           setIsAnalyzing(false);
           toast({
-            title: "Status check failed",
-            description: response.message || "Failed to check status",
-            variant: "destructive",
+            title: "Coming soon",
+            description: "Document analysis feature will be available soon!",
           });
+          return 100;
         }
-      } catch (error) {
-        setIsAnalyzing(false);
-        const errorMessage =
-          error instanceof Error ? error.message : "Failed to check status";
-        toast({
-          title: "Status check failed",
-          description: errorMessage,
-          variant: "destructive",
-        });
-      }
-    };
+        return prev + 2; // Increment by 2% every 100ms to reach 100% in 5 seconds
+      });
+    }, 100);
 
-    pollStatus();
+    // Cleanup interval after 5 seconds
+    setTimeout(() => {
+      clearInterval(interval);
+    }, 5000);
   }, [file, isUploaded, documentId, toast]);
 
   return (
@@ -221,10 +170,13 @@ export function FileUpload() {
               </div>
             ) : isAnalyzing ? (
               <div className="space-y-4">
+                <div className="flex flex-col items-center justify-center space-y-3">
+                  <Spinner variant="circle" size={32} className="text-neutral-600" />
+                  <p className="text-sm text-neutral-600 text-center">
+                    Analyzing document... {analyzeProgress}%
+                  </p>
+                </div>
                 <Progress value={analyzeProgress} className="w-full" />
-                <p className="text-sm text-neutral-600 text-center">
-                  Analyzing document... {analyzeProgress}%
-                </p>
               </div>
             ) : isUploaded ? (
               <div className="flex justify-center">

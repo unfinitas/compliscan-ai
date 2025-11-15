@@ -9,5 +9,4 @@ public record RegulationData(
         String name,
         LocalDate effectiveDate,
         List<ClauseData> clauses
-) {
-}
+) {}
