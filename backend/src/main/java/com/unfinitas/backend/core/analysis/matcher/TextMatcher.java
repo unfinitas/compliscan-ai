@@ -2,7 +2,7 @@ package com.unfinitas.backend.core.analysis.matcher;
 
 import com.unfinitas.backend.core.analysis.service.EmbeddingService;
 import com.unfinitas.backend.core.analysis.service.TranslationService;
-import com.unfinitas.backend.core.ingrestion.model.Paragraph;
+import com.unfinitas.backend.core.ingestion.model.Paragraph;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

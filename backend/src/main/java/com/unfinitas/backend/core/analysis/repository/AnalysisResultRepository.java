@@ -3,7 +3,7 @@ package com.unfinitas.backend.core.analysis.repository;
 import com.unfinitas.backend.core.analysis.model.AnalysisResult;
 import com.unfinitas.backend.core.analysis.model.enums.AnalysisStatus;
 import com.unfinitas.backend.core.analysis.model.enums.AnalysisType;
-import com.unfinitas.backend.core.ingrestion.model.MoeDocument;
+import com.unfinitas.backend.core.ingestion.model.MoeDocument;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;

@@ -3,7 +3,7 @@ package com.unfinitas.backend.core.analysis.engine;
 import com.unfinitas.backend.core.analysis.dto.ClauseMatchResult;
 import com.unfinitas.backend.core.analysis.dto.ParagraphMatch;
 import com.unfinitas.backend.core.analysis.matcher.TextMatcher;
-import com.unfinitas.backend.core.ingrestion.model.Paragraph;
+import com.unfinitas.backend.core.ingestion.model.Paragraph;
 import com.unfinitas.backend.core.regulation.model.RegulationClause;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

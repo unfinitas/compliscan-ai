@@ -2,7 +2,7 @@ package com.unfinitas.backend.core.analysis.model;
 
 import com.unfinitas.backend.core.analysis.model.enums.CoverageStatus;
 import com.unfinitas.backend.core.analysis.model.enums.MatchType;
-import com.unfinitas.backend.core.ingrestion.model.Paragraph;
+import com.unfinitas.backend.core.ingestion.model.Paragraph;
 import com.unfinitas.backend.core.regulation.model.RegulatoryLevel;
 import jakarta.persistence.*;
 import lombok.*;

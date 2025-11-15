@@ -3,7 +3,7 @@ package com.unfinitas.backend.core.analysis.model;
 import com.unfinitas.backend.core.analysis.model.enums.AnalysisStatus;
 import com.unfinitas.backend.core.analysis.model.enums.AnalysisType;
 import com.unfinitas.backend.core.analysis.model.enums.ApprovalRecommendation;
-import com.unfinitas.backend.core.ingrestion.model.MoeDocument;
+import com.unfinitas.backend.core.ingestion.model.MoeDocument;
 import jakarta.persistence.*;
 import lombok.*;
 

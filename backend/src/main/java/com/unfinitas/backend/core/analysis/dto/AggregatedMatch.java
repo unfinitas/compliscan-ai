@@ -1,7 +1,7 @@
 package com.unfinitas.backend.core.analysis.dto;
 
 import com.unfinitas.backend.core.analysis.model.enums.MatchType;
-import com.unfinitas.backend.core.ingrestion.model.Paragraph;
+import com.unfinitas.backend.core.ingestion.model.Paragraph;
 
 import java.util.List;
 
