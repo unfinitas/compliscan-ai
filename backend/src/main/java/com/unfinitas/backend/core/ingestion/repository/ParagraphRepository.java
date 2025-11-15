@@ -1,6 +1,7 @@
 package com.unfinitas.backend.core.ingestion.repository;
 
 import com.unfinitas.backend.core.ingestion.model.ContentType;
+import com.unfinitas.backend.core.ingestion.model.MoeDocument;
 import com.unfinitas.backend.core.ingestion.model.Paragraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -15,6 +16,8 @@ import java.util.UUID;
 public interface ParagraphRepository extends JpaRepository<Paragraph, Long> {
 
     // ========== Existing Flat Query Methods ==========
+
+    List<Paragraph> findByMoeDocument(MoeDocument moeDocument);
 
     /**
      * Find all paragraphs for a given MOE document, ordered by paragraph order
@@ -41,9 +44,9 @@ public interface ParagraphRepository extends JpaRepository<Paragraph, Long> {
     /**
      * Get table of contents (section headings only) for a MOE document.
      * Returns only paragraphs with contentType = HEADING, ordered by document order.
-     * 
+     *
      * Used for building the MOE document structure/navigation.
-     * 
+     *
      * @param moeId The MOE document ID
      * @return List of heading paragraphs
      */
@@ -55,9 +58,9 @@ public interface ParagraphRepository extends JpaRepository<Paragraph, Long> {
     /**
      * Find a specific section and all its descendants using materialized path.
      * For example, querying "1.4" returns: "1.4", "1.4.1", "1.4.2", "1.4.3.1", etc.
-     * 
+     *
      * Uses LIKE pattern matching on section numbers for efficient querying.
-     * 
+     *
      * @param moeId The MOE document ID
      * @param sectionNumber The parent section number (e.g., "1.4", "Part 1")
      * @return List of paragraphs in the section and its descendants
@@ -74,9 +77,9 @@ public interface ParagraphRepository extends JpaRepository<Paragraph, Long> {
     /**
      * Find all paragraphs within a specific Part (e.g., "Part 1", "OSA 1").
      * Returns the Part itself and all sections under it (1.1, 1.2, 1.4.1, etc.).
-     * 
+     *
      * This is a specialized version of findBySectionAndDescendants for Part-level queries.
-     * 
+     *
      * @param moeId The MOE document ID
      * @param partNumber The Part number (e.g., "Part 1", "OSA 1")
      * @return List of all paragraphs in the Part
@@ -94,7 +97,7 @@ public interface ParagraphRepository extends JpaRepository<Paragraph, Long> {
     /**
      * Find direct children of a section (not grandchildren).
      * For example, children of "1.4" are: "1.4.1", "1.4.2", "1.4.3" (but NOT "1.4.1.1").
-     * 
+     *
      * @param moeId The MOE document ID
      * @param parentSection The parent section number
      * @return List of direct child paragraphs, ordered by section number
@@ -109,7 +112,7 @@ public interface ParagraphRepository extends JpaRepository<Paragraph, Long> {
      * - depth=0: All Part-level sections ("Part 1", "Part 2", "OSA 1")
      * - depth=1: All chapter-level sections ("1.1", "1.2", "2.1")
      * - depth=2: All section-level sections ("1.4.1", "2.3.2")
-     * 
+     *
      * @param moeId The MOE document ID
      * @param depth The hierarchical depth (0, 1, or 2)
      * @return List of paragraphs at the specified depth
@@ -121,7 +124,7 @@ public interface ParagraphRepository extends JpaRepository<Paragraph, Long> {
     /**
      * Find all paragraphs of a specific content type.
      * Useful for filtering headings vs regular content.
-     * 
+     *
      * @param moeId The MOE document ID
      * @param contentType The content type (HEADING or PARAGRAPH)
      * @return List of paragraphs with the specified content type
@@ -133,7 +136,7 @@ public interface ParagraphRepository extends JpaRepository<Paragraph, Long> {
     /**
      * Search for paragraphs within a specific section hierarchy.
      * Combines section filtering with full-text search.
-     * 
+     *
      * @param moeId The MOE document ID
      * @param sectionPrefix The section number prefix (e.g., "1.4" to search within section 1.4)
      * @param searchTerm The search term (case-insensitive)
