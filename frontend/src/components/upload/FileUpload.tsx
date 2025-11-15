@@ -10,18 +10,23 @@ import {
 } from "@/components/ui/shadcn-io/dropzone";
 import { HoverBorderGradient } from "@/components/ui/hover-border-gradient";
 import type { FileRejection } from "react-dropzone";
+import { uploadDocument, getDocumentStatus } from "@/api/upload/documentApi";
+import { useMoeId } from "@/utils/moeStore";
+import { ProcessingStatus } from "@/api/model/ProcessingStatus";
 
 export function FileUpload() {
   const { toast } = useToast();
+  const { setMoeId, clearMoeId } = useMoeId();
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isUploaded, setIsUploaded] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [analyzeProgress, setAnalyzeProgress] = useState(0);
+  const [documentId, setDocumentId] = useState<string | null>(null);
 
   const handleFileUpload = useCallback(
-    (acceptedFiles: File[], fileRejections: FileRejection[]) => {
+    async (acceptedFiles: File[], fileRejections: FileRejection[]) => {
       if (fileRejections.length > 0) {
         const error = fileRejections[0]?.errors[0]?.message || "Invalid file";
         toast({
@@ -33,39 +38,127 @@ export function FileUpload() {
       }
 
       if (acceptedFiles.length > 0) {
-        setFile(acceptedFiles[0]);
+        const selectedFile = acceptedFiles[0];
+        setFile(selectedFile);
         setIsUploaded(false);
         setIsUploading(true);
         setUploadProgress(0);
+        setDocumentId(null);
 
-        // Simulate upload progress
-        const interval = setInterval(() => {
-          setUploadProgress((prev) => {
-            if (prev >= 100) {
-              clearInterval(interval);
-              setIsUploading(false);
-              setIsUploaded(true);
-              toast({
-                title: "File uploaded successfully!",
-                description: `${acceptedFiles[0].name} has been uploaded.`,
-              });
-              return 100;
-            }
-            return prev + 10;
+        try {
+          setUploadProgress(50);
+
+          const response = await uploadDocument(selectedFile, null);
+
+          if (
+            response.status === "success" ||
+            response.status === "SUCCESS" ||
+            response.data
+          ) {
+            // Store the document ID (moeId) in Redux
+            setMoeId(response.data.documentId);
+            setDocumentId(response.data.documentId);
+
+            setIsUploading(false);
+            setIsUploaded(true);
+            setUploadProgress(100);
+
+            toast({
+              title: "File uploaded successfully!",
+              description: `${selectedFile.name} has been uploaded and processing has started.`,
+            });
+          } else {
+            setIsUploading(false);
+            setIsUploaded(false);
+            setUploadProgress(0);
+            setFile(null);
+
+            toast({
+              title: "Upload failed",
+              description: response.message || "Failed to upload file",
+              variant: "destructive",
+            });
+          }
+        } catch (error) {
+          setIsUploading(false);
+          setIsUploaded(false);
+          setUploadProgress(0);
+          setFile(null);
+
+          const errorMessage =
+            error instanceof Error ? error.message : "Failed to upload file";
+          toast({
+            title: "Upload failed",
+            description: errorMessage,
+            variant: "destructive",
           });
-        }, 200);
+        }
       }
     },
-    [toast]
+    [toast, setMoeId]
   );
 
-  const handleAnalyze = useCallback(() => {
-    if (!file || !isUploaded) return;
+  const handleAnalyze = useCallback(async () => {
+    if (!file || !isUploaded || !documentId) return;
 
     setIsAnalyzing(true);
     setAnalyzeProgress(0);
 
-  }, [file, isUploaded]);
+    const pollStatus = async () => {
+      try {
+        const response = await getDocumentStatus(documentId, null);
+
+        if (
+          response.status === "success" ||
+          response.status === "SUCCESS" ||
+          response.data
+        ) {
+          const status = response.data;
+
+          if (status.status === ProcessingStatus.COMPLETED) {
+            setAnalyzeProgress(100);
+            setIsAnalyzing(false);
+            toast({
+              title: "Analysis complete!",
+              description: `Document processed successfully with ${status.paragraphCount} paragraphs.`,
+            });
+          } else if (status.status === ProcessingStatus.FAILED) {
+            setIsAnalyzing(false);
+            toast({
+              title: "Analysis failed",
+              description: status.errorMessage || "Failed to process document",
+              variant: "destructive",
+            });
+          } else if (status.status === ProcessingStatus.PROCESSING) {
+            if (status.paragraphCount > 0) {
+              setAnalyzeProgress(Math.min(90, status.paragraphCount * 2));
+            } else {
+              setAnalyzeProgress(10);
+            }
+            setTimeout(pollStatus, 2000);
+          }
+        } else {
+          setIsAnalyzing(false);
+          toast({
+            title: "Status check failed",
+            description: response.message || "Failed to check status",
+            variant: "destructive",
+          });
+        }
+      } catch (error) {
+        setIsAnalyzing(false);
+        const errorMessage =
+          error instanceof Error ? error.message : "Failed to check status";
+        toast({
+          title: "Status check failed",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
+    };
+
+    pollStatus();
+  }, [file, isUploaded, documentId, toast]);
 
   return (
     <div className="mb-16">
@@ -110,6 +203,8 @@ export function FileUpload() {
                     setIsUploaded(false);
                     setUploadProgress(0);
                     setAnalyzeProgress(0);
+                    setDocumentId(null);
+                    clearMoeId();
                   }}
                   className="text-neutral-600 hover:text-neutral-900 transition-colors"
                 >
@@ -150,4 +245,3 @@ export function FileUpload() {
     </div>
   );
 }
-
