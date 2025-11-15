@@ -1,5 +1,6 @@
 package com.unfinitas.backend.core.ingestion.repository;
 
+import com.unfinitas.backend.core.ingestion.model.MoeDocument;
 import com.unfinitas.backend.core.ingestion.model.Paragraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -12,6 +13,8 @@ import java.util.UUID;
  * Repository for Paragraph persistence with hierarchical and section-based queries.
  */
 public interface ParagraphRepository extends JpaRepository<Paragraph, Long> {
+
+    List<Paragraph> findByMoeDocument(MoeDocument moeDocument);
 
     /**
      * Find all paragraphs for a given MOE document in document order.
@@ -90,14 +93,6 @@ public interface ParagraphRepository extends JpaRepository<Paragraph, Long> {
     List<Paragraph> findByPart(
             @Param("moeId") UUID moeId,
             @Param("partNumber") String partNumber
-    );
-
-    /**
-     * Find direct children of a section (NOT grandchildren).
-     * e.g., "1.4" → "1.4.1", "1.4.2", "1.4.3".
-     */
-    List<Paragraph> findByMoeDocumentIdAndParentSectionNumberOrderBySectionNumber(
-            UUID moeId, String parentSectionNumber
     );
 
     /**

@@ -18,10 +18,9 @@ import java.util.stream.Collectors;
 @Slf4j
 public class SemanticAnalyzer {
 
-    private final TextMatcher textMatcher;
-
     private static final double RELEVANCE_THRESHOLD = 0.30;
     private static final int MAX_MATCHES = 10;
+    private final TextMatcher textMatcher;
 
     public SemanticAnalysisResult analyze(
             final List<Paragraph> moeParagraphs,
@@ -87,12 +86,13 @@ public class SemanticAnalyzer {
         return matches.stream()
                 .limit(3)
                 .map(m -> String.format("Section %s (%.0f%%): \"%s\"",
-                        m.paragraph().getSectionNumber(),
+                        m.paragraph().getSection().getSectionNumber(),
                         m.similarity() * 100,
                         m.excerptContext()
                 ))
                 .collect(Collectors.joining("\n"));
     }
 
-    public record SemanticAnalysisResult(List<ClauseMatchResult> clauseMatches) {}
+    public record SemanticAnalysisResult(List<ClauseMatchResult> clauseMatches) {
+    }
 }

@@ -17,7 +17,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.File;
 import java.io.FileOutputStream;
-import java.time.LocalDateTime;
 
 @Service
 @Slf4j
@@ -80,6 +79,10 @@ public class RegulationLoaderService {
         }
     }
 
+    /**
+     * Corrected mapToEntity method.
+     * This maps the DTOs from the parser to your JPA entities.
+     */
     private Regulation mapToEntity(final RegulationData data) {
         final Regulation regulation = Regulation.builder()
                 .code(data.code())
@@ -87,7 +90,6 @@ public class RegulationLoaderService {
                 .name(data.name())
                 .effectiveDate(data.effectiveDate())
                 .active(true)
-                .createdAt(LocalDateTime.now())
                 .build();
 
         int order = 0;
@@ -100,6 +102,7 @@ public class RegulationLoaderService {
                     .clauseType(clauseData.type())
                     .displayOrder(clauseData.displayOrder() != null ? clauseData.displayOrder() : order)
                     .clauseNumber(order++)
+                    .regulationVersion(data.version())
                     .build();
 
             regulation.addClause(clause);
