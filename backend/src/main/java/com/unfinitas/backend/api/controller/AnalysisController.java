@@ -2,6 +2,9 @@ package com.unfinitas.backend.api.controller;
 
 import com.unfinitas.backend.api.dto.AnalysisRequest;
 import com.unfinitas.backend.api.dto.AnalysisResponse;
+import com.unfinitas.backend.api.dto.CountsResponse;
+import com.unfinitas.backend.api.dto.GapsResponse;
+import com.unfinitas.backend.api.dto.SummaryResponse;
 import com.unfinitas.backend.core.analysis.engine.ComplianceAnalysisEngine;
 import com.unfinitas.backend.core.analysis.model.AnalysisResult;
 import com.unfinitas.backend.core.analysis.model.AuditorQuestion;
@@ -93,10 +96,8 @@ public class AnalysisController {
     public ResponseEntity<?> getAnalysisStatus(@PathVariable final UUID id) {
         return analysisRepo.findById(id)
                 .map(a -> ResponseEntity.ok(Map.of(
-                        "analysisId", a.getId(),
-                        "status", a.getStatus(),
-                        "progress", calculateProgress(a),
-                        "createdAt", a.getCreatedAt(),
+                        "id", a.getId(),
+                        "status", a.getStatus().toString(),
                         "completedAt", a.getCompletedAt()
                 )))
                 .orElse(ResponseEntity.notFound().build());
@@ -194,6 +195,68 @@ public class AnalysisController {
                                 .map(this::buildQuestionDto)
                                 .collect(Collectors.toList())
                 )))
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * GET /api/analysis/{id}/counts
+     * Get analysis coverage counts
+     */
+    @GetMapping("/{id}/counts")
+    public ResponseEntity<CountsResponse> getCounts(@PathVariable final UUID id) {
+        log.info("Fetching counts for analysis {}", id);
+
+        return analysisRepo.findById(id)
+                .map(analysis -> new CountsResponse(
+                        analysis.getId(),
+                        analysis.getTotalItems(),
+                        analysis.getCoveredCount(),
+                        analysis.getMissingCount(),
+                        analysis.getPartialCount()
+                ))
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * GET /api/analysis/{id}/gaps-count
+     * Get gap counts by severity
+     */
+    @GetMapping("/{id}/gaps-count")
+    public ResponseEntity<GapsResponse> getGapsCount(@PathVariable final UUID id) {
+        log.info("Fetching gap counts for analysis {}", id);
+
+        return analysisRepo.findById(id)
+                .map(analysis -> {
+                    final int critical = (int) gapRepo.countByAnalysisResultAndSeverity(
+                            analysis, GapSeverity.CRITICAL);
+                    final int major = (int) gapRepo.countByAnalysisResultAndSeverity(
+                            analysis, GapSeverity.MAJOR);
+                    final int minor = (int) gapRepo.countByAnalysisResultAndSeverity(
+                            analysis, GapSeverity.MINOR);
+
+                    return new GapsResponse(analysis.getId(), critical, major, minor);
+                })
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * GET /api/analysis/{id}/summary
+     * Get analysis summary with recommendation
+     */
+    @GetMapping("/{id}/summary")
+    public ResponseEntity<SummaryResponse> getSummary(@PathVariable final UUID id) {
+        log.info("Fetching summary for analysis {}", id);
+
+        return analysisRepo.findById(id)
+                .map(analysis -> new SummaryResponse(
+                        analysis.getId(),
+                        analysis.getApprovalRecommendation() != null ?
+                                analysis.getApprovalRecommendation().toString() : null,
+                        analysis.getExecutiveSummary()
+                ))
+                .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
