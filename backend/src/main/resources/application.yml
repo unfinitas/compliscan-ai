@@ -42,3 +42,24 @@ logging:
   level:
     com.unfinitas.backend: DEBUG
     org.hibernate.SQL: DEBUG
+
+# OpenAI Configuration
+openai:
+  api:
+    key: ${OPENAI_API_KEY}
+
+# DeepL Translation (Optional - for multilingual support)
+deepl:
+  api:
+    key: ${DEEPL_API_KEY:}
+
+translation:
+  enabled: ${TRANSLATION_ENABLED:false}
+
+# Analysis Configuration
+analysis:
+  thresholds:
+    covered: 0.75      # ≥75% = COVERED
+    partial: 0.40      # 40-75% = PARTIAL
+    relevance: 0.30    # Min similarity to consider
+  max-matches: 10      # Max paragraphs per clause
