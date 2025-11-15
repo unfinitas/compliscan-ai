@@ -45,7 +45,6 @@ public class MoeDocumentController {
         int paragraphCount = (int) paragraphRepository.countByMoeDocumentId(document.getId());
         MoeIngestResponse response = MoeIngestResponse.from(document, paragraphCount);
 
-        log.info("Document upload initiated: {}", document.getId());
 
         return ResponseEntity
                 .status(HttpStatus.ACCEPTED)
