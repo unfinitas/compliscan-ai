@@ -9,13 +9,21 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@radix-ui/react-progress": "^1.1.8",
+    "@radix-ui/react-slot": "^1.2.4",
     "@reduxjs/toolkit": "^2.10.1",
+    "@tabler/icons-react": "^3.35.0",
+    "axios": "^1.13.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.553.0",
+    "motion": "^12.23.24",
     "next": "16.0.3",
+    "radix-ui": "^1.4.3",
     "react": "19.2.0",
     "react-dom": "19.2.0",
+    "react-dropzone": "^14.3.8",
+    "react-redux": "^9.2.0",
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
