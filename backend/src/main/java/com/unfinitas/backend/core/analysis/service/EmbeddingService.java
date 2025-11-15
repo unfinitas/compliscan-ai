@@ -17,9 +17,10 @@ public class EmbeddingService {
     private final Map<String, List<Double>> embeddingCache = new ConcurrentHashMap<>();
     private static final String MODEL = "text-embedding-3-small";
 
-    public EmbeddingService(@Value("${openai.api.key}") final String apiKey) {
-        this.openAiService = new OpenAiService(apiKey);
-        log.info("Initialized OpenAI Embedding Service with model: {}", MODEL);
+    public EmbeddingService(@Value("${openai.api.key:dummy-key}") final String apiKey) {
+        // Temporarily use dummy key for testing PDF parser
+        this.openAiService = new OpenAiService("dummy-key-for-testing");
+        log.info("Initialized OpenAI Embedding Service with model: {} (TEST MODE)", MODEL);
     }
 
     /**

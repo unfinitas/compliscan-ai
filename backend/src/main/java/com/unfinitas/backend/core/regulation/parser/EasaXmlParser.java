@@ -38,7 +38,13 @@ public class EasaXmlParser {
         final String[] titleParts = parseRegulationTitle(sourceTitle);
         final String regulationCode = titleParts[0];
         final String regulationName = titleParts[1];
-        final String version = extractVersion(document);
+
+        // Check if this is an AMC/GM file from the filepath
+        String version = extractVersion(document);
+        if (filePath != null && (filePath.toLowerCase().contains("_acm_gm") ||
+                                 filePath.toLowerCase().contains("_amc_gm"))) {
+            version = version + "-AMC-GM";
+        }
 
         // Extract effective date
         final LocalDate effectiveDate = extractEffectiveDate(document);
@@ -63,7 +69,8 @@ public class EasaXmlParser {
         // Example: "Easy Access Rules for Continuing Airworthiness (Regulation (EU) No 1321/2014)"
         if (sourceTitle.contains("(Regulation")) {
             final int start = sourceTitle.indexOf("(Regulation");
-            final int end = sourceTitle.indexOf(")", start);
+            // Find the last closing parenthesis to get the complete regulation code
+            final int end = sourceTitle.lastIndexOf(")");
             if (end > start) {
                 final String code = sourceTitle.substring(start + 1, end).trim(); // "Regulation (EU) No 1321/2014"
                 final String name = sourceTitle.substring(0, start).trim();
