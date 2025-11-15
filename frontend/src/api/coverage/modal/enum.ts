@@ -1,0 +1,11 @@
+export enum StatusType {
+  FAILED = "FAILED",
+  IN_PROGRESS = "IN_PROGRESS",
+  PENDING = "PENDING",
+  COMPLETED = "COMPLETED",
+}
+export enum matchType {
+  SINGLE = "SINGLE",
+  AGGREGATE = "AGGREGATE",
+  DISTRIBUTED = "DISTRIBUTED",
+}
