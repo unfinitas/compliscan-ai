@@ -20,7 +20,7 @@ spring:
   # JPA Configuration
   jpa:
     hibernate:
-      ddl-auto: create-drop  # Recreate schema on startup (development only)
+      ddl-auto: update  # Recreate schema on startup (development only)
     show-sql: true
     properties:
       hibernate:
@@ -43,11 +43,6 @@ logging:
     com.unfinitas.backend: DEBUG
     org.hibernate.SQL: DEBUG
 
-# OpenAI Configuration
-openai:
-  api:
-    key: ${OPENAI_API_KEY:dummy-key-for-testing}
-
 # DeepL Translation (Optional - for multilingual support)
 deepl:
   api:
@@ -63,3 +58,12 @@ analysis:
     partial: 0.40      # 40-75% = PARTIAL
     relevance: 0.30    # Min similarity to consider
   max-matches: 10      # Max paragraphs per clause
+
+embedding:
+  provider: gemini
+  openai:
+    api-key: ${OPENAI_API_KEY}
+    model: text-embedding-3-small
+  gemini:
+    api-key: ${GEMINI_API_KEY}
+    model: gemini-embedding-001

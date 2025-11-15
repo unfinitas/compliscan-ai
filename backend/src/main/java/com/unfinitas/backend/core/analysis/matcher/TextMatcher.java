@@ -27,15 +27,15 @@ public class TextMatcher {
         }
 
         // Translate if needed
-        final TranslationService.TranslationResult tr1 = translationService.translateIfNeeded(text1);
-        final TranslationService.TranslationResult tr2 = translationService.translateIfNeeded(text2);
-
-        if (tr1.wasTranslated() || tr2.wasTranslated()) {
-            log.debug("Translated text before similarity calculation");
-        }
+//        final TranslationService.TranslationResult tr1 = translationService.translateIfNeeded(text1);
+//        final TranslationService.TranslationResult tr2 = translationService.translateIfNeeded(text2);
+//
+//        if (tr1.wasTranslated() || tr2.wasTranslated()) {
+//            log.debug("Translated text before similarity calculation");
+//        }
 
         // Calculate embedding similarity
-        return embeddingService.calculateSimilarity(tr1.text(), tr2.text());
+        return embeddingService.calculateSimilarity(text1, text2);
     }
 
     /**

@@ -1,133 +1,75 @@
 package com.unfinitas.backend.core.analysis.service;
 
-import com.theokanning.openai.embedding.EmbeddingRequest;
-import com.theokanning.openai.service.OpenAiService;
+import com.unfinitas.backend.core.analysis.embedding.VectorEmbeddingProvider;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @Slf4j
 public class EmbeddingService {
 
-    private final OpenAiService openAiService;
-    private final Map<String, List<Double>> embeddingCache = new ConcurrentHashMap<>();
-    private static final String MODEL = "text-embedding-3-small";
+    private final VectorEmbeddingProvider provider;
+    private final Map<String, List<Double>> cache = new ConcurrentHashMap<>();
 
-    public EmbeddingService(@Value("${openai.api.key:dummy-key}") final String apiKey) {
-        // Temporarily use dummy key for testing PDF parser
-        this.openAiService = new OpenAiService("dummy-key-for-testing");
-        log.info("Initialized OpenAI Embedding Service with model: {} (TEST MODE)", MODEL);
+    public EmbeddingService(final VectorEmbeddingProvider provider) {
+        this.provider = provider;
+        log.info("EmbeddingService initialized with provider model: {}", provider.model());
     }
 
-    /**
-     * Get embedding for text (with cache)
-     */
     public List<Double> embed(final String text) {
         if (text == null || text.isBlank()) {
             return Collections.emptyList();
         }
 
-        // Check cache
-        final String cacheKey = text.trim();
-        if (embeddingCache.containsKey(cacheKey)) {
-            log.debug("Cache hit for text: {}...", text.substring(0, Math.min(50, text.length())));
-            return embeddingCache.get(cacheKey);
-        }
-
-        // Generate embedding
-        try {
-            final List<Double> embedding = generateEmbedding(text);
-            embeddingCache.put(cacheKey, embedding);
-            log.debug("Generated and cached embedding for text: {}...",
-                    text.substring(0, Math.min(50, text.length())));
-            return embedding;
-
-        } catch (final Exception e) {
-            log.error("Failed to generate embedding", e);
-            throw new RuntimeException("Embedding generation failed", e);
-        }
+        return cache.computeIfAbsent(text.trim(), provider::embed);
     }
 
-    /**
-     * Batch embed multiple texts
-     */
     public Map<String, List<Double>> batchEmbed(final List<String> texts) {
-        final Map<String, List<Double>> results = new HashMap<>();
-
-        for (final String text : texts) {
-            if (text != null && !text.isBlank()) {
-                results.put(text, embed(text));
+        final Map<String, List<Double>> result = new HashMap<>();
+        for (final String t : texts) {
+            if (t != null && !t.isBlank()) {
+                result.put(t, embed(t));
             }
         }
-
-        return results;
+        return result;
     }
 
-    /**
-     * Calculate cosine similarity between two embeddings
-     */
-    public double cosineSimilarity(final List<Double> vec1, final List<Double> vec2) {
-        if (vec1.isEmpty() || vec2.isEmpty() || vec1.size() != vec2.size()) {
+    public double cosineSimilarity(final List<Double> v1, final List<Double> v2) {
+        if (v1.isEmpty() || v2.isEmpty() || v1.size() != v2.size()) {
             return 0.0;
         }
 
-        double dotProduct = 0.0;
-        double norm1 = 0.0;
-        double norm2 = 0.0;
+        double dot = 0.0;
+        double n1 = 0.0;
+        double n2 = 0.0;
 
-        for (int i = 0; i < vec1.size(); i++) {
-            dotProduct += vec1.get(i) * vec2.get(i);
-            norm1 += vec1.get(i) * vec1.get(i);
-            norm2 += vec2.get(i) * vec2.get(i);
+        for (int i = 0; i < v1.size(); i++) {
+            dot += v1.get(i) * v2.get(i);
+            n1 += v1.get(i) * v1.get(i);
+            n2 += v2.get(i) * v2.get(i);
         }
 
-        if (norm1 == 0.0 || norm2 == 0.0) {
-            return 0.0;
-        }
-
-        return dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2));
+        return dot / (Math.sqrt(n1) * Math.sqrt(n2));
     }
 
-    /**
-     * Calculate similarity between two texts
-     */
-    public double calculateSimilarity(final String text1, final String text2) {
-        final List<Double> emb1 = embed(text1);
-        final List<Double> emb2 = embed(text2);
-        return cosineSimilarity(emb1, emb2);
+    public double calculateSimilarity(final String a, final String b) {
+        return cosineSimilarity(embed(a), embed(b));
     }
 
-    /**
-     * Clear cache (for testing or memory management)
-     */
     public void clearCache() {
-        embeddingCache.clear();
-        log.info("Embedding cache cleared");
+        cache.clear();
     }
 
-    /**
-     * Get cache statistics
-     */
-    public Map<String, Object> getCacheStats() {
+    public Map<String, Object> cacheStats() {
         return Map.of(
-                "size", embeddingCache.size(),
-                "model", MODEL
+                "size", cache.size(),
+                "providerModel", provider.model()
         );
-    }
-
-    private List<Double> generateEmbedding(final String text) {
-        final EmbeddingRequest request = EmbeddingRequest.builder()
-                .model(MODEL)
-                .input(List.of(text))
-                .build();
-
-        return openAiService.createEmbeddings(request)
-                .getData()
-                .get(0)
-                .getEmbedding();
     }
 }

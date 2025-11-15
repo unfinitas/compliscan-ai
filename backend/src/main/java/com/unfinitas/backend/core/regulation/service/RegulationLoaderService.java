@@ -52,11 +52,6 @@ public class RegulationLoaderService {
     private void loadFromResources() throws Exception {
         final PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
 
-        final Resource[] xmlResources = resolver.getResources("classpath:regulation-data/xml/*.xml");
-        for (final Resource resource : xmlResources) {
-            loadFromXml(resource);
-        }
-
         final Resource[] pdfResources = resolver.getResources("classpath:regulation-data/pdf/*.pdf");
         for (final Resource resource : pdfResources) {
             loadFromPdf(resource);
