@@ -6,7 +6,7 @@ import { uploadFile, sendRequestWithResponse } from "@/utils/gateway";
 import { RequestEnum } from "@/utils/requestEnum";
 import { ApiResponse } from "@/utils/ApiResponse";
 
-const API_BASE = "/api/moe/documents";
+const API_BASE = `${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080"}/api/moe/documents`;
 
 /**
  * Upload and initiate document processing
