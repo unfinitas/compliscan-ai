@@ -21,7 +21,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update  # Recreate schema on startup (development only)
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
         format_sql: true
@@ -41,7 +41,7 @@ app:
 logging:
   level:
     com.unfinitas.backend: DEBUG
-    org.hibernate.SQL: DEBUG
+    org.hibernate.SQL: INFO
 
 # DeepL Translation (Optional - for multilingual support)
 deepl:

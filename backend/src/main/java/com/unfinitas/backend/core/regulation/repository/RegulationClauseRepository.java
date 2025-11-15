@@ -11,4 +11,12 @@ import java.util.UUID;
 public interface RegulationClauseRepository extends JpaRepository<RegulationClause, UUID> {
 
     List<RegulationClause> findByRegulationVersionOrderByClauseNumberAsc(String regulationVersion);
+
+    List<RegulationClause> findByEmbeddingIsNull();
+
+    List<RegulationClause> findByEmbeddingModelNot(String model);
+
+    int countByEmbeddingIsNull();
+
+    List<RegulationClause> findByRegulationId(UUID id);
 }

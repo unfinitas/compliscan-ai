@@ -1,5 +1,6 @@
 package com.unfinitas.backend.core.ingestion.service;
 
+import com.unfinitas.backend.core.analysis.service.EmbeddingService;
 import com.unfinitas.backend.core.ingestion.PdfParser;
 import com.unfinitas.backend.core.ingestion.exception.DocumentProcessingException;
 import com.unfinitas.backend.core.ingestion.model.MoeDocument;
@@ -37,29 +38,30 @@ public class MoeIngestionService {
     private final SectionRepository sectionRepository;
     private final FileValidator fileValidator;
     private final SectionNumberExtractor sectionNumberExtractor;
+    private final EmbeddingService embeddingService;
 
     @Value("${app.upload.dir}")
     private String uploadDir;
 
     @Transactional
-    public MoeDocument initiateIngestion(MultipartFile file) {
+    public MoeDocument initiateIngestion(final MultipartFile file) {
         try {
             fileValidator.validatePdfFile(file);
 
-            String fileName = file.getOriginalFilename();
-            Long fileSize = file.getSize();
+            final String fileName = file.getOriginalFilename();
+            final Long fileSize = file.getSize();
 
             log.info("Initiating ingestion for file: {}, size: {} bytes", fileName, fileSize);
 
-            Path uploadPath = Paths.get(uploadDir);
+            final Path uploadPath = Paths.get(uploadDir);
             if (!Files.exists(uploadPath)) {
                 Files.createDirectories(uploadPath);
                 log.info("Created upload directory: {}", uploadPath.toAbsolutePath());
             }
 
-            UUID documentId = UUID.randomUUID();
-            String storedFileName = documentId + ".pdf";
-            Path filePath = uploadPath.resolve(storedFileName);
+            final UUID documentId = UUID.randomUUID();
+            final String storedFileName = documentId + ".pdf";
+            final Path filePath = uploadPath.resolve(storedFileName);
 
             Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
             log.info("Saved PDF file to: {}", filePath.toAbsolutePath());
@@ -72,10 +74,10 @@ public class MoeIngestionService {
 
             return document;
 
-        } catch (IOException e) {
+        } catch (final IOException e) {
             log.error("Failed to save uploaded file: {}", e.getMessage(), e);
             throw new DocumentProcessingException("Failed to save uploaded file: " + e.getMessage(), e);
-        } catch (Exception e) {
+        } catch (final Exception e) {
             log.error("Failed to initiate ingestion: {}", e.getMessage(), e);
             throw new DocumentProcessingException("Failed to initiate ingestion: " + e.getMessage(), e);
         }
@@ -83,41 +85,41 @@ public class MoeIngestionService {
 
     @Async("taskExecutor")
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void processDocumentAsync(UUID documentId) {
+    public void processDocumentAsync(final UUID documentId) {
         log.info("Starting async processing for document: {}", documentId);
 
-        MoeDocument document = moeDocumentRepository.findById(documentId)
+        final MoeDocument document = moeDocumentRepository.findById(documentId)
                 .orElseThrow(() -> new DocumentProcessingException("Document not found: " + documentId));
 
         try {
-            Path filePath = Paths.get(document.getFilePath());
+            final Path filePath = Paths.get(document.getFilePath());
 
             if (!Files.exists(filePath)) {
                 throw new DocumentProcessingException("PDF file not found at: " + filePath);
             }
 
-            try (FileInputStream fileInputStream = new FileInputStream(filePath.toFile())) {
-                PdfParser.ParsedPdfResult parsedResult = pdfParser.parse(fileInputStream, document.getFileName());
+            try (final FileInputStream fileInputStream = new FileInputStream(filePath.toFile())) {
+                final PdfParser.ParsedPdfResult parsedResult = pdfParser.parse(fileInputStream, document.getFileName());
                 document.updatePageCount(parsedResult.pageCount());
 
                 // Log raw text preview
-                String rawText = parsedResult.rawText();
+                final String rawText = parsedResult.rawText();
                 log.info("PDF raw text length: {} chars", rawText.length());
                 log.debug("First 500 chars of raw text: {}", rawText.substring(0, Math.min(500, rawText.length())));
 
                 // Split by single newline since PDFBox doesn't preserve paragraph breaks
-                String[] rawLines = parsedResult.rawText().split("\n");
+                final String[] rawLines = parsedResult.rawText().split("\n");
                 log.info("Split into {} lines for processing", rawLines.length);
 
-                Map<String, Section> sectionMap = new HashMap<>();
-                List<ParagraphData> paragraphDataList = new ArrayList<>();
+                final Map<String, Section> sectionMap = new HashMap<>();
+                final List<ParagraphData> paragraphDataList = new ArrayList<>();
 
                 int sectionOrder = 0;
                 String currentSectionNumber = null;
                 StringBuilder currentParagraph = new StringBuilder();
 
-                for (String line : rawLines) {
-                    String trimmed = line.trim();
+                for (final String line : rawLines) {
+                    final String trimmed = line.trim();
 
                     // Skip empty lines
                     if (trimmed.isEmpty()) {
@@ -125,15 +127,15 @@ public class MoeIngestionService {
                     }
 
                     // Try to extract section info from this line
-                    SectionNumberExtractor.SectionInfo sectionInfo = sectionNumberExtractor.extract(trimmed);
+                    final SectionNumberExtractor.SectionInfo sectionInfo = sectionNumberExtractor.extract(trimmed);
 
                     if (sectionInfo != null) {
                         // Found a section header!
                         log.info("FOUND SECTION: {} - {} (depth: {})",
-                            sectionInfo.number(), sectionInfo.title(), sectionInfo.depth());
+                                sectionInfo.number(), sectionInfo.title(), sectionInfo.depth());
 
                         // Save accumulated paragraph before starting new section
-                        if (currentParagraph.length() > 0) {
+                        if (!currentParagraph.isEmpty()) {
                             paragraphDataList.add(new ParagraphData(currentSectionNumber, currentParagraph.toString().trim()));
                             currentParagraph = new StringBuilder();
                         }
@@ -147,13 +149,13 @@ public class MoeIngestionService {
                                 parentSection = sectionMap.get(sectionInfo.parent());
                             }
 
-                            Section section = new Section(
-                                document,
-                                sectionInfo.number(),
-                                sectionInfo.title(),
-                                sectionInfo.depth(),
-                                parentSection,
-                                sectionOrder++
+                            final Section section = new Section(
+                                    document,
+                                    sectionInfo.number(),
+                                    sectionInfo.title(),
+                                    sectionInfo.depth(),
+                                    parentSection,
+                                    sectionOrder++
                             );
                             sectionMap.put(currentSectionNumber, section);
                         }
@@ -165,7 +167,7 @@ public class MoeIngestionService {
 
                     } else {
                         // Regular content line - accumulate into current paragraph
-                        if (currentParagraph.length() > 0) {
+                        if (!currentParagraph.isEmpty()) {
                             currentParagraph.append("\n");
                         }
                         currentParagraph.append(trimmed);
@@ -179,13 +181,13 @@ public class MoeIngestionService {
                 }
 
                 // Don't forget the last accumulated paragraph
-                if (currentParagraph.length() > 0) {
+                if (!currentParagraph.isEmpty()) {
                     paragraphDataList.add(new ParagraphData(currentSectionNumber, currentParagraph.toString().trim()));
                 }
 
                 log.info("Accumulated {} paragraphs from {} lines", paragraphDataList.size(), rawLines.length);
 
-                List<Section> sections = new ArrayList<>(sectionMap.values());
+                final List<Section> sections = new ArrayList<>(sectionMap.values());
                 sectionRepository.saveAll(sections);
                 log.info("Saved {} sections for document {}", sections.size(), documentId);
 
@@ -195,19 +197,19 @@ public class MoeIngestionService {
                 } else {
                     log.info("Section extraction successful:");
                     sections.stream().limit(10).forEach(s ->
-                        log.info("  - {} : {} (depth: {})", s.getSectionNumber(), s.getSectionTitle(), s.getDepth())
+                            log.info("  - {} : {} (depth: {})", s.getSectionNumber(), s.getSectionTitle(), s.getDepth())
                     );
                     if (sections.size() > 10) {
                         log.info("  ... and {} more sections", sections.size() - 10);
                     }
                 }
 
-                List<Paragraph> paragraphList = new ArrayList<>();
+                final List<Paragraph> paragraphList = new ArrayList<>();
                 int paragraphOrder = 0;
 
-                for (ParagraphData data : paragraphDataList) {
-                    Section section = data.sectionNumber != null ? sectionMap.get(data.sectionNumber) : null;
-                    Paragraph paragraph = new Paragraph(document, section, paragraphOrder++, data.content);
+                for (final ParagraphData data : paragraphDataList) {
+                    final Section section = data.sectionNumber != null ? sectionMap.get(data.sectionNumber) : null;
+                    final Paragraph paragraph = new Paragraph(document, section, paragraphOrder++, data.content);
                     paragraphList.add(paragraph);
                 }
 
@@ -218,36 +220,43 @@ public class MoeIngestionService {
                     return;
                 }
 
+                // Save paragraphs first
                 paragraphRepository.saveAll(paragraphList);
+                log.info("Saved {} paragraphs for document {}", paragraphList.size(), documentId);
+
+                // Generate embeddings asynchronously (non-blocking)
+                log.info("Triggering async embedding generation for {} paragraphs", paragraphList.size());
+                embeddingService.generateParagraphEmbeddingsAsync(paragraphList);
+
                 document.markAsCompleted();
                 moeDocumentRepository.save(document);
 
-                log.info("Successfully processed document: {}, sections: {}, paragraphs: {}",
-                    documentId, sections.size(), paragraphList.size());
+                log.info("Successfully processed document: {}, sections: {}, paragraphs: {} (embeddings in progress)",
+                        documentId, sections.size(), paragraphList.size());
             }
 
-        } catch (Exception e) {
-            String errorMessage = "Failed to process document: " + e.getMessage();
+        } catch (final Exception e) {
+            final String errorMessage = "Failed to process document: " + e.getMessage();
             document.markAsFailed(errorMessage);
             moeDocumentRepository.save(document);
             log.error("Failed to process document {}: {}", documentId, e.getMessage(), e);
         }
     }
 
-    private boolean hasContentBeyondHeading(String text, SectionNumberExtractor.SectionInfo section) {
-        String header = section.number() + " " + section.title();
-        int headerEndIndex = text.indexOf(header);
+    private boolean hasContentBeyondHeading(final String text, final SectionNumberExtractor.SectionInfo section) {
+        final String header = section.number() + " " + section.title();
+        final int headerEndIndex = text.indexOf(header);
 
         if (headerEndIndex == -1) {
             return true;
         }
 
-        int contentStartIndex = headerEndIndex + header.length();
+        final int contentStartIndex = headerEndIndex + header.length();
         if (contentStartIndex >= text.length()) {
             return false;
         }
 
-        String remainingText = text.substring(contentStartIndex).trim();
+        final String remainingText = text.substring(contentStartIndex).trim();
         return !remainingText.isEmpty();
     }
 

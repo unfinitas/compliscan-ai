@@ -50,24 +50,24 @@ public class EasaPdfParser {
     /**
      * Parse PDF file and extract structured regulation data
      */
-    public RegulationData parsePdf(InputStream inputStream, String filename) throws Exception {
+    public RegulationData parsePdf(final InputStream inputStream, final String filename) throws Exception {
         log.info("Parsing EASA PDF: {}", filename);
 
         // Extract raw text using PdfBoxParser
-        PdfParser.ParsedPdfResult pdfResult = pdfParser.parse(inputStream, filename);
-        String rawText = pdfResult.rawText();
+        final PdfParser.ParsedPdfResult pdfResult = pdfParser.parse(inputStream, filename);
+        final String rawText = pdfResult.rawText();
 
         // Extract regulation metadata
-        String regulationCode = extractRegulationCode(filename, pdfResult.title());
-        String regulationName = extractRegulationName(filename, pdfResult.title());
-        String version = extractVersion(filename);
-        LocalDate effectiveDate = extractEffectiveDate(rawText);
+        final String regulationCode = extractRegulationCode(filename, pdfResult.title());
+        final String regulationName = extractRegulationName(filename, pdfResult.title());
+        final String version = extractVersion(filename);
+        final LocalDate effectiveDate = extractEffectiveDate(rawText);
 
         // Determine if this is an AMC/GM document
-        boolean isAmcGm = isAmcGmFile(filename);
+        final boolean isAmcGm = isAmcGmFile(filename);
 
         // Extract clauses from text
-        List<ClauseData> clauses = extractClauses(rawText, isAmcGm);
+        final List<ClauseData> clauses = extractClauses(rawText, isAmcGm);
 
         log.info("Parsed regulation: {} - {} with {} clauses", regulationCode, regulationName, clauses.size());
 
@@ -85,16 +85,16 @@ public class EasaPdfParser {
      * Example: "95CADA_2025-09-02_06.16.08_EAR-for-Continuing-Airworthiness-Regulation-EU-No-1321-2014.pdf"
      * Returns: "Regulation (EU) No 1321/2014"
      */
-    private String extractRegulationCode(String filename, String pdfTitle) {
+    private String extractRegulationCode(final String filename, final String pdfTitle) {
         if (filename != null) {
-            Matcher matcher = Pattern.compile("(?:Regulation-)?EU-No-(\\d+)-(\\d+)").matcher(filename);
+            final Matcher matcher = Pattern.compile("(?:Regulation-)?EU-No-(\\d+)-(\\d+)").matcher(filename);
             if (matcher.find()) {
                 return "Regulation (EU) No " + matcher.group(1) + "/" + matcher.group(2);
             }
         }
 
         if (pdfTitle != null && pdfTitle.contains("Regulation")) {
-            Matcher matcher = Pattern.compile("Regulation\\s+\\(EU\\)\\s+No\\.?\\s+(\\d+/\\d+)").matcher(pdfTitle);
+            final Matcher matcher = Pattern.compile("Regulation\\s+\\(EU\\)\\s+No\\.?\\s+(\\d+/\\d+)").matcher(pdfTitle);
             if (matcher.find()) {
                 return "Regulation (EU) No " + matcher.group(1);
             }
@@ -106,7 +106,7 @@ public class EasaPdfParser {
     /**
      * Extract regulation name from filename or title
      */
-    private String extractRegulationName(String filename, String pdfTitle) {
+    private String extractRegulationName(final String filename, final String pdfTitle) {
         if (filename != null && filename.contains("EAR-for-")) {
             String name = filename.substring(filename.indexOf("EAR-for-"));
             name = name.replaceFirst("EAR-for-", "Easy Access Rules for ");
@@ -116,8 +116,8 @@ public class EasaPdfParser {
         }
 
         if (pdfTitle != null && pdfTitle.contains("Easy Access Rules")) {
-            int start = pdfTitle.indexOf("Easy Access Rules");
-            int end = pdfTitle.indexOf("(Regulation");
+            final int start = pdfTitle.indexOf("Easy Access Rules");
+            final int end = pdfTitle.indexOf("(Regulation");
             if (end > start) {
                 return pdfTitle.substring(start, end).trim();
             }
@@ -133,11 +133,11 @@ public class EasaPdfParser {
      * For AMC/GM files, append "-AMC-GM" to differentiate from main regulation
      * For regular PDF files, append "-PDF" to differentiate from XML versions
      */
-    private String extractVersion(String filename) {
+    private String extractVersion(final String filename) {
         String baseVersion = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
 
         if (filename != null) {
-            Matcher matcher = Pattern.compile("(\\d{4})-(\\d{2})-(\\d{2})").matcher(filename);
+            final Matcher matcher = Pattern.compile("(\\d{4})-(\\d{2})-(\\d{2})").matcher(filename);
             if (matcher.find()) {
                 baseVersion = matcher.group(1) + "-" + matcher.group(2);
             }
@@ -157,16 +157,16 @@ public class EasaPdfParser {
     /**
      * Try to extract effective date from PDF content
      */
-    private LocalDate extractEffectiveDate(String rawText) {
+    private LocalDate extractEffectiveDate(final String rawText) {
         // Look for common date patterns in the text
-        Pattern datePattern = Pattern.compile("(?:Effective|Applicable|Entry into force).*?(\\d{1,2}\\s+\\w+\\s+\\d{4})",
+        final Pattern datePattern = Pattern.compile("(?:Effective|Applicable|Entry into force).*?(\\d{1,2}\\s+\\w+\\s+\\d{4})",
                                               Pattern.CASE_INSENSITIVE);
-        Matcher matcher = datePattern.matcher(rawText);
+        final Matcher matcher = datePattern.matcher(rawText);
 
         if (matcher.find()) {
             try {
                 return LocalDate.parse(matcher.group(1), DATE_FORMATTER);
-            } catch (Exception e) {
+            } catch (final Exception e) {
                 log.debug("Could not parse date: {}", matcher.group(1));
             }
         }
@@ -178,11 +178,11 @@ public class EasaPdfParser {
     /**
      * Determine if this is an AMC/GM file from filename
      */
-    private boolean isAmcGmFile(String filename) {
+    private boolean isAmcGmFile(final String filename) {
         if (filename == null) {
             return false;
         }
-        String lower = filename.toLowerCase();
+        final String lower = filename.toLowerCase();
         return lower.contains("_acm_gm") || lower.contains("_amc_gm") ||
                lower.contains("amgm") || lower.contains("amc") || lower.contains("gm");
     }
@@ -190,15 +190,15 @@ public class EasaPdfParser {
     /**
      * Extract structured clauses from PDF raw text
      */
-    private List<ClauseData> extractClauses(String rawText, boolean isAmcGm) {
-        List<ClauseData> clauses = new ArrayList<>();
+    private List<ClauseData> extractClauses(final String rawText, final boolean isAmcGm) {
+        final List<ClauseData> clauses = new ArrayList<>();
 
         if (rawText == null || rawText.trim().isEmpty()) {
             log.warn("Empty raw text provided for clause extraction");
             return clauses;
         }
 
-        String[] lines = rawText.split("\\r?\\n");
+        final String[] lines = rawText.split("\\r?\\n");
         StringBuilder currentContent = new StringBuilder();
         String currentClauseId = null;
         String currentTitle = null;
@@ -216,7 +216,7 @@ public class EasaPdfParser {
             }
 
             // Check if this line starts a new clause
-            ClauseIdentifier identifier = identifyClause(line, isAmcGm);
+            final ClauseIdentifier identifier = identifyClause(line, isAmcGm);
 
             if (identifier != null && identifier.isClauseStart) {
                 // Save previous clause if exists
@@ -242,7 +242,7 @@ public class EasaPdfParser {
 
                 // Add remaining content if title is extracted from line
                 if (identifier.title != null && line.length() > identifier.title.length()) {
-                    String remainingContent = line.substring(line.indexOf(identifier.title) + identifier.title.length()).trim();
+                    final String remainingContent = line.substring(line.indexOf(identifier.title) + identifier.title.length()).trim();
                     if (!remainingContent.isEmpty()) {
                         currentContent.append(remainingContent).append("\n");
                     }
@@ -274,12 +274,12 @@ public class EasaPdfParser {
     /**
      * Identify if a line starts a new clause and extract its metadata
      */
-    private ClauseIdentifier identifyClause(String line, boolean defaultIsAmcGm) {
+    private ClauseIdentifier identifyClause(final String line, final boolean defaultIsAmcGm) {
         // Check for AMC pattern
-        Matcher amcMatcher = AMC_PATTERN.matcher(line);
+        final Matcher amcMatcher = AMC_PATTERN.matcher(line);
         if (amcMatcher.find()) {
-            String reference = amcMatcher.group(1);
-            String clauseNumber = extractClauseNumberFromReference(reference);
+            final String reference = amcMatcher.group(1);
+            final String clauseNumber = extractClauseNumberFromReference(reference);
             return new ClauseIdentifier(
                     clauseNumber != null ? "AMC_" + clauseNumber : "AMC_" + reference.split("\\s+")[0],
                     line,
@@ -290,10 +290,10 @@ public class EasaPdfParser {
         }
 
         // Check for GM pattern
-        Matcher gmMatcher = GM_PATTERN.matcher(line);
+        final Matcher gmMatcher = GM_PATTERN.matcher(line);
         if (gmMatcher.find()) {
-            String reference = gmMatcher.group(1);
-            String clauseNumber = extractClauseNumberFromReference(reference);
+            final String reference = gmMatcher.group(1);
+            final String clauseNumber = extractClauseNumberFromReference(reference);
             return new ClauseIdentifier(
                     clauseNumber != null ? "GM_" + clauseNumber : "GM_" + reference.split("\\s+")[0],
                     line,
@@ -304,10 +304,10 @@ public class EasaPdfParser {
         }
 
         // Check for M.A. pattern
-        Matcher maMatcher = MA_PATTERN.matcher(line);
+        final Matcher maMatcher = MA_PATTERN.matcher(line);
         if (maMatcher.find()) {
-            String clauseId = maMatcher.group(1);
-            String title = maMatcher.group(2);
+            final String clauseId = maMatcher.group(1);
+            final String title = maMatcher.group(2);
             return new ClauseIdentifier(
                     clauseId,
                     title != null ? clauseId + " " + title : clauseId,
@@ -318,10 +318,10 @@ public class EasaPdfParser {
         }
 
         // Check for ML.A. pattern
-        Matcher mlMatcher = ML_PATTERN.matcher(line);
+        final Matcher mlMatcher = ML_PATTERN.matcher(line);
         if (mlMatcher.find()) {
-            String clauseId = mlMatcher.group(1);
-            String title = mlMatcher.group(2);
+            final String clauseId = mlMatcher.group(1);
+            final String title = mlMatcher.group(2);
             return new ClauseIdentifier(
                     clauseId,
                     title != null ? clauseId + " " + title : clauseId,
@@ -332,10 +332,10 @@ public class EasaPdfParser {
         }
 
         // Check for Article pattern
-        Matcher articleMatcher = ARTICLE_PATTERN.matcher(line);
+        final Matcher articleMatcher = ARTICLE_PATTERN.matcher(line);
         if (articleMatcher.find()) {
-            String articleNum = articleMatcher.group(1);
-            String title = articleMatcher.group(2);
+            final String articleNum = articleMatcher.group(1);
+            final String title = articleMatcher.group(2);
             return new ClauseIdentifier(
                     "Article_" + articleNum,
                     title != null ? "Article " + articleNum + " " + title : "Article " + articleNum,
@@ -346,10 +346,10 @@ public class EasaPdfParser {
         }
 
         // Check for Appendix pattern
-        Matcher appendixMatcher = APPENDIX_PATTERN.matcher(line);
+        final Matcher appendixMatcher = APPENDIX_PATTERN.matcher(line);
         if (appendixMatcher.find()) {
-            String appendixNum = appendixMatcher.group(1);
-            String title = appendixMatcher.group(2);
+            final String appendixNum = appendixMatcher.group(1);
+            final String title = appendixMatcher.group(2);
             return new ClauseIdentifier(
                     "Appendix_" + appendixNum,
                     title != null ? "Appendix " + appendixNum + " " + title : "Appendix " + appendixNum,
@@ -360,10 +360,10 @@ public class EasaPdfParser {
         }
 
         // Check for section headers
-        Matcher sectionMatcher = SECTION_HEADER_PATTERN.matcher(line);
+        final Matcher sectionMatcher = SECTION_HEADER_PATTERN.matcher(line);
         if (sectionMatcher.find()) {
-            String sectionNum = sectionMatcher.group(1);
-            String title = sectionMatcher.group(2);
+            final String sectionNum = sectionMatcher.group(1);
+            final String title = sectionMatcher.group(2);
             return new ClauseIdentifier(
                     "SECTION_" + sectionNum,
                     title != null ? "SECTION " + sectionNum + " - " + title : line,
@@ -379,22 +379,22 @@ public class EasaPdfParser {
     /**
      * Extract parent clause from a reference string
      */
-    private String extractParentFromReference(String reference) {
+    private String extractParentFromReference(final String reference) {
         if (reference == null) {
             return null;
         }
 
-        Matcher maMatcher = Pattern.compile("(M\\.A\\.\\d+)").matcher(reference);
+        final Matcher maMatcher = Pattern.compile("(M\\.A\\.\\d+)").matcher(reference);
         if (maMatcher.find()) {
             return maMatcher.group(1);
         }
 
-        Matcher mlMatcher = Pattern.compile("(ML\\.A\\.\\d+)").matcher(reference);
+        final Matcher mlMatcher = Pattern.compile("(ML\\.A\\.\\d+)").matcher(reference);
         if (mlMatcher.find()) {
             return mlMatcher.group(1);
         }
 
-        Matcher articleMatcher = Pattern.compile("Article\\s+(\\d+)").matcher(reference);
+        final Matcher articleMatcher = Pattern.compile("Article\\s+(\\d+)").matcher(reference);
         if (articleMatcher.find()) {
             return "Article_" + articleMatcher.group(1);
         }
@@ -406,30 +406,30 @@ public class EasaPdfParser {
      * Extract clause number from reference text (e.g., "M.A.101 Aircraft maintenance programme" -> "M.A.101")
      * This ensures clauseId stays under 100 characters for database compatibility
      */
-    private String extractClauseNumberFromReference(String reference) {
+    private String extractClauseNumberFromReference(final String reference) {
         if (reference == null) {
             return null;
         }
 
         // Try to extract M.A.XXX or ML.A.XXX pattern
-        Matcher maMatcher = Pattern.compile("^(M\\.A\\.\\d+(?:\\.\\d+)?)").matcher(reference);
+        final Matcher maMatcher = Pattern.compile("^(M\\.A\\.\\d+(?:\\.\\d+)?)").matcher(reference);
         if (maMatcher.find()) {
             return maMatcher.group(1).replaceAll("\\.", "_");
         }
 
-        Matcher mlMatcher = Pattern.compile("^(ML\\.A\\.\\d+(?:\\.\\d+)?)").matcher(reference);
+        final Matcher mlMatcher = Pattern.compile("^(ML\\.A\\.\\d+(?:\\.\\d+)?)").matcher(reference);
         if (mlMatcher.find()) {
             return mlMatcher.group(1).replaceAll("\\.", "_");
         }
 
         // Try to extract Article pattern
-        Matcher articleMatcher = Pattern.compile("^Article\\s+(\\d+)").matcher(reference);
+        final Matcher articleMatcher = Pattern.compile("^Article\\s+(\\d+)").matcher(reference);
         if (articleMatcher.find()) {
             return "Article_" + articleMatcher.group(1);
         }
 
         // Try to extract Part pattern
-        Matcher partMatcher = Pattern.compile("^Part-([A-Z]+)").matcher(reference);
+        final Matcher partMatcher = Pattern.compile("^Part-([A-Z]+)").matcher(reference);
         if (partMatcher.find()) {
             return "Part_" + partMatcher.group(1);
         }
@@ -443,21 +443,9 @@ public class EasaPdfParser {
     }
 
     /**
-     * Internal class to hold clause identification results
-     */
-    private static class ClauseIdentifier {
-        final String clauseId;
-        final String title;
-        final String clauseType;
-        final String parentClause;
-        final boolean isClauseStart;
-
-        ClauseIdentifier(String clauseId, String title, String clauseType, String parentClause, boolean isClauseStart) {
-            this.clauseId = clauseId;
-            this.title = title;
-            this.clauseType = clauseType;
-            this.parentClause = parentClause;
-            this.isClauseStart = isClauseStart;
-        }
+         * Internal class to hold clause identification results
+         */
+        private record ClauseIdentifier(String clauseId, String title, String clauseType, String parentClause,
+                                        boolean isClauseStart) {
     }
 }

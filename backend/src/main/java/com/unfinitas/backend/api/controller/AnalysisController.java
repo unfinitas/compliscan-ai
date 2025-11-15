@@ -211,8 +211,6 @@ public class AnalysisController {
                 Map.entry("complianceScore", analysis.getComplianceScore()),
                 Map.entry("approvalRecommendation", analysis.getApprovalRecommendation()),
                 Map.entry("executiveSummary", analysis.getExecutiveSummary()),
-                Map.entry("sourceLanguage", analysis.getSourceLanguage()),
-                Map.entry("translationRequired", analysis.getTranslationRequired()),
                 Map.entry("createdAt", analysis.getCreatedAt()),
                 Map.entry("completedAt", analysis.getCompletedAt())
         );

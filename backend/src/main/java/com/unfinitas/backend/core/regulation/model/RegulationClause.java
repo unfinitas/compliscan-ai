@@ -2,8 +2,7 @@ package com.unfinitas.backend.core.regulation.model;
 
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.GenericGenerator;
-
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -12,7 +11,8 @@ import java.util.UUID;
         @Index(name = "idx_regulation_version", columnList = "regulation_version"),
         @Index(name = "idx_clause_id", columnList = "clause_id"),
         @Index(name = "idx_clause_type", columnList = "clause_type"),
-        @Index(name = "idx_clause_regulation_id", columnList = "regulation_id")
+        @Index(name = "idx_clause_regulation_id", columnList = "regulation_id"),
+        @Index(name = "idx_clause_embedding_model", columnList = "embedding_model, embedded_at")
 })
 @Getter
 @Setter
@@ -20,7 +20,6 @@ import java.util.UUID;
 @AllArgsConstructor
 @Builder
 public class RegulationClause {
-
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(updatable = false, nullable = false)
@@ -57,8 +56,17 @@ public class RegulationClause {
     @Column(name = "display_order")
     private Integer displayOrder;
 
+    /**
+     * Vector embedding stored as TEXT for JPA compatibility
+     */
     @Column(name = "embedding", columnDefinition = "TEXT")
     private String embedding;
+
+    @Column(name = "embedding_model", length = 100)
+    private String embeddingModel;
+
+    @Column(name = "embedded_at")
+    private Instant embeddedAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -75,6 +83,45 @@ public class RegulationClause {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
+    }
+
+    public boolean needsEmbedding(final String currentModel) {
+        return embedding == null
+                || embeddingModel == null
+                || !embeddingModel.equals(currentModel);
+    }
+
+    /**
+     * Convert embedding string to float array for calculations
+     */
+    @Transient
+    public float[] getEmbeddingArray() {
+        if (embedding == null || embedding.isEmpty()) {
+            return null;
+        }
+        String[] parts = embedding.substring(1, embedding.length() - 1).split(",");
+        float[] result = new float[parts.length];
+        for (int i = 0; i < parts.length; i++) {
+            result[i] = Float.parseFloat(parts[i].trim());
+        }
+        return result;
+    }
+
+    /**
+     * Set embedding from float array
+     */
+    public void setEmbeddingFromArray(float[] arr) {
+        if (arr == null) {
+            this.embedding = null;
+            return;
+        }
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < arr.length; i++) {
+            if (i > 0) sb.append(",");
+            sb.append(arr[i]);
+        }
+        sb.append("]");
+        this.embedding = sb.toString();
     }
 
     public boolean isRequirement() {

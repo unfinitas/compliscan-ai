@@ -9,55 +9,91 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class SemanticAnalyzer {
-
     private static final double RELEVANCE_THRESHOLD = 0.30;
     private static final int MAX_MATCHES = 10;
+
     private final TextMatcher textMatcher;
 
     public SemanticAnalysisResult analyze(
             final List<Paragraph> moeParagraphs,
             final List<RegulationClause> clauses) {
 
-        final List<ClauseMatchResult> results = new ArrayList<>();
+        log.info("Starting semantic analysis: {} clauses vs {} paragraphs",
+                clauses.size(), moeParagraphs.size());
 
-        for (final RegulationClause clause : clauses) {
-            log.debug("Analyzing clause: {}", clause.getClauseId());
+        // Validate embeddings exist
+        final long clausesWithoutEmbedding = clauses.stream()
+                .filter(c -> c.getEmbedding() == null)
+                .count();
 
-            // Find all relevant paragraphs
-            final List<ParagraphMatch> matches = textMatcher.findAllMatches(
-                            clause.getContent(),
-                            moeParagraphs,
-                            RELEVANCE_THRESHOLD
-                    ).stream()
-                    .limit(MAX_MATCHES)
-                    .map(r -> new ParagraphMatch(
-                            r.paragraph(),
-                            r.similarity(),
-                            extractContext(r.paragraph())
-                    ))
-                    .toList();
+        final long paragraphsWithoutEmbedding = moeParagraphs.stream()
+                .filter(p -> p.getEmbedding() == null)
+                .count();
 
-            final double bestSimilarity = matches.isEmpty() ? 0.0 : matches.get(0).similarity();
-            final ClauseMatchResult.MatchQuality quality = determineQuality(bestSimilarity);
-            final String evidence = buildEvidence(matches);
-
-            results.add(new ClauseMatchResult(
-                    clause.getClauseId(),
-                    clause.getTitle(),
-                    matches,
-                    bestSimilarity,
-                    quality,
-                    evidence
-            ));
+        if (clausesWithoutEmbedding > 0) {
+            log.warn("{} clauses missing embeddings - they will be skipped", clausesWithoutEmbedding);
         }
+
+        if (paragraphsWithoutEmbedding > 0) {
+            log.warn("{} paragraphs missing embeddings - they will be skipped", paragraphsWithoutEmbedding);
+        }
+
+        // Use batch processing for efficiency - now returns Map<UUID, ...>
+        final Map<UUID, List<TextMatcher.ParagraphMatchResult>> batchResults =
+                textMatcher.batchFindMatches(clauses, moeParagraphs, RELEVANCE_THRESHOLD);
+
+        log.info("Batch similarity computation complete. Building results...");
+
+        // Build results from batch processing - lookup by UUID instead of clauseId
+        final List<ClauseMatchResult> results = clauses.stream()
+                .map(clause -> {
+                    final List<TextMatcher.ParagraphMatchResult> clauseMatches =
+                            batchResults.getOrDefault(clause.getId(), List.of()); // Use UUID
+
+                    final List<ParagraphMatch> matches = clauseMatches.stream()
+                            .limit(MAX_MATCHES)
+                            .map(r -> new ParagraphMatch(
+                                    r.paragraph(),
+                                    r.similarity(),
+                                    extractContext(r.paragraph())
+                            ))
+                            .toList();
+
+                    final double bestSimilarity = matches.isEmpty() ? 0.0 : matches.get(0).similarity();
+                    final ClauseMatchResult.MatchQuality quality = determineQuality(bestSimilarity);
+                    if (quality.equals(ClauseMatchResult.MatchQuality.GOOD)) {
+                        log.error("========================================");
+                        log.error(clause.getContent());
+                        log.error(matches.get(0).paragraph().getContent());
+                        log.error("Quality: " + quality.toString());
+                        log.error("Similar: " + matches.get(0).similarity());
+                        log.error("========================================");
+                    }
+
+                    final String evidence = buildEvidence(matches);
+
+                    return new ClauseMatchResult(
+                            clause.getClauseId(),
+                            clause.getTitle(),
+                            matches,
+                            bestSimilarity,
+                            quality,
+                            evidence
+                    );
+                })
+                .toList();
+
+        log.info("Semantic analysis complete: {} clause results generated", results.size());
+        logAnalysisSummary(results);
 
         return new SemanticAnalysisResult(results);
     }
@@ -85,14 +121,76 @@ public class SemanticAnalyzer {
 
         return matches.stream()
                 .limit(3)
-                .map(m -> String.format("Section %s (%.0f%%): \"%s\"",
-                        m.paragraph().getSection().getSectionNumber(),
-                        m.similarity() * 100,
-                        m.excerptContext()
-                ))
+                .map(m -> {
+                    final String sectionNumber = m.paragraph().getSection() != null
+                            ? m.paragraph().getSection().getSectionNumber()
+                            : "N/A";
+
+                    return String.format("Section %s (%.0f%%): \"%s\"",
+                            sectionNumber,
+                            m.similarity() * 100,
+                            m.excerptContext()
+                    );
+                })
                 .collect(Collectors.joining("\n"));
     }
 
+    private void logAnalysisSummary(final List<ClauseMatchResult> results) {
+        final Map<ClauseMatchResult.MatchQuality, Long> qualityDistribution = results.stream()
+                .collect(Collectors.groupingBy(
+                        ClauseMatchResult::quality,
+                        Collectors.counting()
+                ));
+
+        log.info("Analysis Summary:");
+        log.info("  Total clauses analyzed: {}", results.size());
+        qualityDistribution.forEach((quality, count) ->
+                log.info("  {} matches: {}", quality, count)
+        );
+
+        final long clausesWithMatches = results.stream()
+                .filter(r -> !r.matches().isEmpty())
+                .count();
+
+        log.info("  Clauses with matches: {}/{}", clausesWithMatches, results.size());
+    }
+
     public record SemanticAnalysisResult(List<ClauseMatchResult> clauseMatches) {
+
+        /**
+         * Get summary statistics of the analysis
+         */
+        public AnalysisSummary getSummary() {
+            final Map<ClauseMatchResult.MatchQuality, Long> distribution = clauseMatches.stream()
+                    .collect(Collectors.groupingBy(
+                            ClauseMatchResult::quality,
+                            Collectors.counting()
+                    ));
+
+            final long totalClauses = clauseMatches.size();
+            final long matchedClauses = clauseMatches.stream()
+                    .filter(r -> !r.matches().isEmpty())
+                    .count();
+
+            final double averageSimilarity = clauseMatches.stream()
+                    .mapToDouble(ClauseMatchResult::bestSimilarity)
+                    .average()
+                    .orElse(0.0);
+
+            return new AnalysisSummary(
+                    totalClauses,
+                    matchedClauses,
+                    averageSimilarity,
+                    distribution
+            );
+        }
+    }
+
+    public record AnalysisSummary(
+            long totalClauses,
+            long matchedClauses,
+            double averageSimilarity,
+            Map<ClauseMatchResult.MatchQuality, Long> qualityDistribution
+    ) {
     }
 }

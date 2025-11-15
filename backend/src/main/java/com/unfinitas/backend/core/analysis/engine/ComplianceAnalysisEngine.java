@@ -25,8 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -71,10 +70,13 @@ public class ComplianceAnalysisEngine {
         try {
             // Load data
             final List<Paragraph> moeParagraphs = paragraphRepo.findByMoeDocument(moeDoc);
-            final List<RegulationClause> clauses = regulationService.loadClauses(regulationVersion);
+            final List<RegulationClause> allClauses = regulationService.loadClauses(regulationVersion);
 
-            log.info("Loaded {} paragraphs and {} regulation clauses",
-                    moeParagraphs.size(), clauses.size());
+            // CRITICAL: Filter to only Part-145 Section A requirements (145.A.10 to 145.A.205)
+            final List<RegulationClause> clauses = filterPart145SectionA(allClauses);
+
+            log.info("Loaded {} paragraphs and {} Part-145 Section A clauses (filtered from {} total)",
+                    moeParagraphs.size(), clauses.size(), allClauses.size());
 
             // Stage 1: Semantic Analysis
             log.info("Stage 1/4: Semantic matching");
@@ -150,6 +152,62 @@ public class ComplianceAnalysisEngine {
         }
     }
 
+    /**
+     * Filter clauses to Part-145 (all clauses containing "145")
+     * Includes REQUIREMENTS, AMC, and GM for Part-145
+     */
+    private List<RegulationClause> filterPart145SectionA(final List<RegulationClause> allClauses) {
+
+        log.info("=== Filtering for Part-145 clauses ===");
+
+        final List<RegulationClause> filtered = allClauses.stream()
+                .filter(this::isPart145)
+                .toList();
+
+        log.info("Filtered Part-145: {} clauses from {} total ({}%)",
+                filtered.size(),
+                allClauses.size(),
+                String.format("%.1f", (filtered.size() * 100.0) / allClauses.size()));
+
+        if (filtered.isEmpty()) {
+            log.error("NO Part-145 CLAUSES FOUND!");
+        } else {
+            log.info("Part-145 clauses by type:");
+            final Map<String, Long> typeDistribution = filtered.stream()
+                    .collect(Collectors.groupingBy(
+                            c -> c.getClauseType() != null ? c.getClauseType() : "NULL",
+                            Collectors.counting()
+                    ));
+            typeDistribution.forEach((type, count) ->
+                    log.info("  {}: {} clauses", type, count));
+
+            log.info("Sample filtered clauses:");
+            filtered.stream()
+                    .limit(10)
+                    .forEach(c -> log.info("  ✓ {} [{}]: {}",
+                            c.getClauseId(),
+                            c.getClauseType(),
+                            c.getTitle() != null ? c.getTitle().substring(0, Math.min(50, c.getTitle().length())) : ""));
+        }
+
+        return filtered;
+    }
+
+    /**
+     * Check if clause is related to Part-145
+     * Matches any clause_id containing "145"
+     */
+    private boolean isPart145(final RegulationClause clause) {
+        final String clauseId = clause.getClauseId();
+
+        if (clauseId == null || clauseId.isEmpty()) {
+            return false;
+        }
+
+        // Simply check if "145" appears in the clause_id
+        return clauseId.contains("145");
+    }
+
     private CoverageResult createCoverageResult(
             final AnalysisResult analysis,
             final ClauseMatchResult matchResult) {
@@ -160,9 +218,12 @@ public class ComplianceAnalysisEngine {
         // Extract evidence
         final String evidence = matchResult.matches().stream()
                 .limit(3)
-                .map(m -> String.format("Section %s (%.0f%%)",
-                        m.paragraph().getSection().getSectionNumber(),
-                        m.similarity() * 100))
+                .map(m -> {
+                    final String sectionNum = m.paragraph().getSection() != null
+                            ? m.paragraph().getSection().getSectionNumber()
+                            : "N/A";
+                    return String.format("Section %s (%.0f%%)", sectionNum, m.similarity() * 100);
+                })
                 .collect(Collectors.joining(", "));
 
         // Get matched paragraphs

@@ -2,6 +2,7 @@ package com.unfinitas.backend.core.analysis.embedding;
 
 import com.google.genai.Client;
 import com.google.genai.types.ContentEmbedding;
+import com.google.genai.types.EmbedContentConfig;
 import com.google.genai.types.EmbedContentResponse;
 import lombok.extern.slf4j.Slf4j;
 
@@ -9,6 +10,7 @@ import java.util.*;
 
 @Slf4j
 public class GeminiEmbedProvider implements VectorEmbeddingProvider {
+
     private final Client client;
     private final String model;
 
@@ -30,25 +32,45 @@ public class GeminiEmbedProvider implements VectorEmbeddingProvider {
             return Collections.emptyList();
         }
 
-        final EmbedContentResponse response = client.models.embedContent(model, text, null);
+        try {
+            final EmbedContentResponse response =
+                    client.models.embedContent(model,
+                            text,
+                            EmbedContentConfig.builder()
+                                    .taskType("CLUSTERING")
+                                    .build()
+                    );
 
-        return response.embeddings()
-                .flatMap(embeddings -> embeddings.isEmpty() ? Optional.empty() : Optional.of(embeddings.get(0)))
-                .flatMap(ContentEmbedding::values)
-                .orElse(Collections.emptyList())
-                .stream()
-                .map(Float::doubleValue)
-                .toList();
+            final Optional<List<ContentEmbedding>> embeddingsOpt = response.embeddings();
+            if (embeddingsOpt.isEmpty() || embeddingsOpt.get().isEmpty()) {
+                return Collections.emptyList();
+            }
+
+            final ContentEmbedding embedding = embeddingsOpt.get().get(0);
+
+            final Optional<List<Float>> values = embedding.values();
+            return values.map(floats -> floats.stream()
+                    .map(Number::doubleValue)
+                    .toList()).orElse(Collections.emptyList());
+
+        } catch (final Exception ex) {
+            log.error("Embedding failed for text: {}", ex.getMessage(), ex);
+            return Collections.emptyList();
+        }
     }
 
     @Override
     public Map<String, List<Double>> embedBatch(final List<String> texts) {
-        final Map<String, List<Double>> out = new HashMap<>();
-        for (final String t : texts) {
-            if (t != null && !t.isBlank()) {
-                out.put(t, embed(t));
+        final Map<String, List<Double>> out = new LinkedHashMap<>();
+
+        for (final String txt : texts) {
+            if (txt == null || txt.isBlank()) {
+                out.put(txt, Collections.emptyList());
+                continue;
             }
+            out.put(txt, embed(txt));
         }
+
         return out;
     }
 }

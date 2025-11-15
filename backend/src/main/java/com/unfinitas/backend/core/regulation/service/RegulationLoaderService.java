@@ -1,5 +1,6 @@
 package com.unfinitas.backend.core.regulation.service;
 
+import com.unfinitas.backend.core.analysis.service.EmbeddingService;
 import com.unfinitas.backend.core.regulation.dto.ClauseData;
 import com.unfinitas.backend.core.regulation.dto.RegulationData;
 import com.unfinitas.backend.core.regulation.model.Regulation;
@@ -7,6 +8,7 @@ import com.unfinitas.backend.core.regulation.model.RegulationClause;
 import com.unfinitas.backend.core.regulation.parser.EasaXmlParser;
 import com.unfinitas.backend.core.regulation.parser.EasaPdfParser;
 import com.unfinitas.backend.core.regulation.repository.RegulationRepository;
+import com.unfinitas.backend.core.regulation.repository.RegulationClauseRepository;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.util.List;
 
 @Service
 @Slf4j
@@ -26,14 +29,19 @@ import java.io.InputStream;
 public class RegulationLoaderService {
 
     private final RegulationRepository regulationRepo;
+    private final RegulationClauseRepository clauseRepository;
     private final EasaXmlParser xmlParser;
     private final EasaPdfParser pdfParser;
+    private final EmbeddingService embeddingService;
 
     @PostConstruct
     public void loadRegulationsOnStartup() {
         if (regulationRepo.count() == 0) {
             log.info("Starting async regulation loading...");
             loadRegulationsAsync();
+        } else {
+            log.info("Regulations already loaded. Checking for missing embeddings...");
+            generateMissingEmbeddings();
         }
     }
 
@@ -44,8 +52,35 @@ public class RegulationLoaderService {
             log.info("Loading regulations from XML and PDF...");
             loadFromResources();
             log.info("Regulation loading completed successfully");
+
+            // Generate embeddings for all loaded clauses
+            log.info("Starting embedding generation for loaded regulations...");
+            generateMissingEmbeddings();
+
         } catch (final Exception e) {
             log.error("Failed to load regulations", e);
+        }
+    }
+
+    @Async
+    @Transactional
+    public void generateMissingEmbeddings() {
+        try {
+            log.info("Checking for clauses without embeddings...");
+            final List<RegulationClause> clausesNeedingEmbedding = clauseRepository.findByEmbeddingIsNull();
+
+            if (clausesNeedingEmbedding.isEmpty()) {
+                log.info("All regulation clauses already have embeddings");
+                return;
+            }
+
+            log.info("Found {} clauses without embeddings. Starting generation...",
+                    clausesNeedingEmbedding.size());
+
+            embeddingService.generateClauseEmbeddingsAsync(clausesNeedingEmbedding);
+
+        } catch (final Exception e) {
+            log.error("Failed to generate embeddings for regulations", e);
         }
     }
 
@@ -125,7 +160,7 @@ public class RegulationLoaderService {
             // Parse PDF
             final long startTime = System.currentTimeMillis();
             final RegulationData data;
-            try (InputStream inputStream = resource.getInputStream()) {
+            try (final InputStream inputStream = resource.getInputStream()) {
                 data = pdfParser.parsePdf(inputStream, filename);
             }
             final long parseTime = System.currentTimeMillis() - startTime;

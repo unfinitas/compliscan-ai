@@ -55,11 +55,11 @@ public interface ParagraphRepository extends JpaRepository<Paragraph, Long> {
      * Query paragraphs at a specific depth (0=Part, 1=Chapter, 2=Section, etc.).
      */
     @Query("""
-        SELECT p FROM Paragraph p JOIN p.section s
-        WHERE p.moeDocument.id = :moeId
-          AND s.depth = :depth
-        ORDER BY p.paragraphOrder
-        """)
+            SELECT p FROM Paragraph p JOIN p.section s
+            WHERE p.moeDocument.id = :moeId
+              AND s.depth = :depth
+            ORDER BY p.paragraphOrder
+            """)
     List<Paragraph> findByDepth(@Param("moeId") UUID moeId, @Param("depth") Integer depth);
 
     /**
@@ -67,11 +67,11 @@ public interface ParagraphRepository extends JpaRepository<Paragraph, Long> {
      * e.g., "1.4" → "1.4", "1.4.1", "1.4.2", "1.4.2.1", etc.
      */
     @Query("""
-        SELECT p FROM Paragraph p JOIN p.section s
-        WHERE p.moeDocument.id = :moeId
-          AND (s.sectionNumber = :sectionNumber OR s.sectionNumber LIKE CONCAT(:sectionNumber, '.%'))
-        ORDER BY p.paragraphOrder
-        """)
+            SELECT p FROM Paragraph p JOIN p.section s
+            WHERE p.moeDocument.id = :moeId
+              AND (s.sectionNumber = :sectionNumber OR s.sectionNumber LIKE CONCAT(:sectionNumber, '.%'))
+            ORDER BY p.paragraphOrder
+            """)
     List<Paragraph> findBySectionAndDescendants(
             @Param("moeId") UUID moeId,
             @Param("sectionNumber") String sectionNumber
@@ -81,15 +81,15 @@ public interface ParagraphRepository extends JpaRepository<Paragraph, Long> {
      * Find all paragraphs in a Part (e.g., "Part 1", "OSA 1") and its nested sections.
      */
     @Query("""
-        SELECT p FROM Paragraph p JOIN p.section s
-        WHERE p.moeDocument.id = :moeId
-          AND (
-                s.sectionNumber = :partNumber
-             OR s.sectionNumber LIKE CONCAT(:partNumber, '.%')
-             OR (s.parent IS NOT NULL AND s.parent.sectionNumber = :partNumber)
-          )
-        ORDER BY p.paragraphOrder
-        """)
+            SELECT p FROM Paragraph p JOIN p.section s
+            WHERE p.moeDocument.id = :moeId
+              AND (
+                    s.sectionNumber = :partNumber
+                 OR s.sectionNumber LIKE CONCAT(:partNumber, '.%')
+                 OR (s.parent IS NOT NULL AND s.parent.sectionNumber = :partNumber)
+              )
+            ORDER BY p.paragraphOrder
+            """)
     List<Paragraph> findByPart(
             @Param("moeId") UUID moeId,
             @Param("partNumber") String partNumber
@@ -106,12 +106,12 @@ public interface ParagraphRepository extends JpaRepository<Paragraph, Long> {
      * Search inside a section hierarchy with content filtering.
      */
     @Query("""
-        SELECT p FROM Paragraph p JOIN p.section s
-        WHERE p.moeDocument.id = :moeId
-          AND (s.sectionNumber = :sectionPrefix OR s.sectionNumber LIKE CONCAT(:sectionPrefix, '.%'))
-          AND LOWER(p.content) LIKE LOWER(CONCAT('%', :searchTerm, '%'))
-        ORDER BY p.paragraphOrder
-        """)
+            SELECT p FROM Paragraph p JOIN p.section s
+            WHERE p.moeDocument.id = :moeId
+              AND (s.sectionNumber = :sectionPrefix OR s.sectionNumber LIKE CONCAT(:sectionPrefix, '.%'))
+              AND LOWER(p.content) LIKE LOWER(CONCAT('%', :searchTerm, '%'))
+            ORDER BY p.paragraphOrder
+            """)
     List<Paragraph> searchInSection(
             @Param("moeId") UUID moeId,
             @Param("sectionPrefix") String sectionPrefix,
@@ -122,13 +122,24 @@ public interface ParagraphRepository extends JpaRepository<Paragraph, Long> {
      * Search across the entire document.
      */
     @Query("""
-        SELECT p FROM Paragraph p
-        WHERE p.moeDocument.id = :moeId
-          AND LOWER(p.content) LIKE LOWER(CONCAT('%', :searchTerm, '%'))
-        ORDER BY p.paragraphOrder
-        """)
+            SELECT p FROM Paragraph p
+            WHERE p.moeDocument.id = :moeId
+              AND LOWER(p.content) LIKE LOWER(CONCAT('%', :searchTerm, '%'))
+            ORDER BY p.paragraphOrder
+            """)
     List<Paragraph> searchInDocument(
             @Param("moeId") UUID moeId,
             @Param("searchTerm") String searchTerm
     );
+
+    List<Paragraph> findByEmbeddingIsNull();
+
+    List<Paragraph> findByEmbeddingModelNot(String model);
+
+    int countByEmbeddingIsNull();
+
+    int countByMoeDocumentIdAndEmbeddingIsNotNull(UUID docId);
+
+    List<Paragraph> findByMoeDocumentId(UUID id);
+
 }

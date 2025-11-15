@@ -2,36 +2,36 @@ package com.unfinitas.backend.api.dto;
 
 import com.unfinitas.backend.core.ingestion.model.MoeDocument;
 import com.unfinitas.backend.core.ingestion.model.ProcessingStatus;
+import lombok.Builder;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * Response DTO for document status inquiry
- */
+@Builder
 public record DocumentStatusResponse(
         UUID documentId,
-        String fileName,
-        Long fileSize,
-        Integer pageCount,
-        Integer paragraphCount,
+        String filename,
         ProcessingStatus status,
         String errorMessage,
-        LocalDateTime createdAt
+        int totalParagraphs,
+        int embeddedParagraphs,
+        boolean embeddingComplete,
+        LocalDateTime uploadedAt,
+        LocalDateTime processedAt
 ) {
-    /**
-     * Create response from MoeDocument entity with paragraph count
-     */
-    public static DocumentStatusResponse from(MoeDocument document, int paragraphCount) {
-        return new DocumentStatusResponse(
-                document.getId(),
-                document.getFileName(),
-                document.getFileSize(),
-                document.getPageCount(),
-                paragraphCount,
-                document.getProcessingStatus(),
-                document.getErrorMessage(),
-                document.getCreatedAt()
-        );
+    public static DocumentStatusResponse from(
+            final MoeDocument document,
+            final int paragraphCount,
+            final int embeddedCount
+    ) {
+        return DocumentStatusResponse.builder()
+                .documentId(document.getId())
+                .filename(document.getFileName())
+                .status(document.getProcessingStatus())
+                .errorMessage(document.getErrorMessage())
+                .totalParagraphs(paragraphCount)
+                .embeddedParagraphs(embeddedCount)
+                .embeddingComplete(paragraphCount > 0 && paragraphCount == embeddedCount)
+                .build();
     }
 }

@@ -23,14 +23,37 @@ public class GapDetector {
             final SemanticAnalyzer.SemanticAnalysisResult semanticResult,
             final List<RegulationClause> clauses) {
 
+        log.info("Starting gap detection for {} clauses", clauses.size());
+
         final List<GapFinding> gaps = new ArrayList<>();
+
+        // Handle duplicate clause_id values
         final Map<String, RegulationClause> clauseMap = clauses.stream()
-                .collect(Collectors.toMap(RegulationClause::getClauseId, c -> c));
+                .collect(Collectors.toMap(
+                        RegulationClause::getClauseId,
+                        clause -> clause,
+                        (existing, duplicate) -> {
+                            log.warn("Duplicate clause_id found: {} - keeping first occurrence (id: {})",
+                                    duplicate.getClauseId(), existing.getId());
+                            return existing; // Keep first
+                        }
+                ));
+
+        // Build match map from semantic results
+        final Map<String, ClauseMatchResult> matchMap = semanticResult.clauseMatches().stream()
+                .collect(Collectors.toMap(
+                        ClauseMatchResult::clauseId,
+                        result -> result,
+                        (existing, duplicate) -> existing // Keep first
+                ));
 
         for (final ClauseMatchResult match : semanticResult.clauseMatches()) {
             final RegulationClause clause = clauseMap.get(match.clauseId());
 
-            if (clause == null) continue;
+            if (clause == null) {
+                log.warn("No clause found for clauseId: {}", match.clauseId());
+                continue;
+            }
 
             final GapSeverity severity = determineSeverity(match, clause);
 
@@ -49,7 +72,15 @@ public class GapDetector {
             }
         }
 
-        log.info("Detected {} gaps", gaps.size());
+        log.info("Detected {} gaps from {} clauses", gaps.size(), semanticResult.clauseMatches().size());
+
+        // Log severity distribution
+        final Map<GapSeverity, Long> severityDistribution = gaps.stream()
+                .collect(Collectors.groupingBy(GapFinding::getSeverity, Collectors.counting()));
+        severityDistribution.forEach((severity, count) ->
+                log.info("  {} gaps: {}", severity, count)
+        );
+
         return new GapAnalysisResult(gaps);
     }
 
@@ -110,12 +141,15 @@ public class GapDetector {
             actions.add("Add new section addressing " + clause.getTitle());
             actions.add("Reference regulation " + clause.getClauseId());
         } else {
-            actions.add("Expand existing content in sections: " +
-                    match.matches().stream()
-                            .map(m -> m.paragraph().getSection().getSectionNumber())
-                            .distinct()
-                            .limit(3)
-                            .collect(Collectors.joining(", ")));
+            final String sections = match.matches().stream()
+                    .map(m -> m.paragraph().getSection() != null
+                            ? m.paragraph().getSection().getSectionNumber()
+                            : "N/A")
+                    .distinct()
+                    .limit(3)
+                    .collect(Collectors.joining(", "));
+
+            actions.add("Expand existing content in sections: " + sections);
             actions.add("Add explicit reference to " + clause.getClauseId());
         }
 
