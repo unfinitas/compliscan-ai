@@ -46,7 +46,7 @@ logging:
 # OpenAI Configuration
 openai:
   api:
-    key: ${OPENAI_API_KEY}
+    key: ${OPENAI_API_KEY:dummy-key-for-testing}
 
 # DeepL Translation (Optional - for multilingual support)
 deepl:
