@@ -1,3 +1,44 @@
 spring:
   application:
     name: compliscan-ai
+
+  # File Upload Configuration
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: -1        # No limit
+      max-request-size: -1     # No limit
+      file-size-threshold: 2MB # Memory threshold
+
+  # Database Configuration
+  datasource:
+    url: jdbc:postgresql://localhost:5432/compliscan
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+
+  # JPA Configuration
+  jpa:
+    hibernate:
+      ddl-auto: create-drop  # Recreate schema on startup (development only)
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    open-in-view: false
+
+# Server Configuration
+server:
+  port: 8080
+
+# Application Configuration
+app:
+  upload:
+    dir: ${UPLOAD_DIR:./uploads/moe}  # Default to ./uploads/moe, can override with env var
+
+# Logging Configuration
+logging:
+  level:
+    com.unfinitas.backend: DEBUG
+    org.hibernate.SQL: DEBUG
