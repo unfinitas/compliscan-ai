@@ -8,6 +8,10 @@ import com.unfinitas.backend.core.analysis.repository.AnalysisResultRepository;
 import com.unfinitas.backend.core.analysis.repository.ComplianceOutcomeRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -22,7 +26,6 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Slf4j
 public class AnalysisController {
-
     private final ComplianceAnalysisEngine analysisEngine;
     private final AnalysisResultRepository analysisRepo;
     private final ComplianceOutcomeRepository complianceOutcomeRepo;
@@ -32,34 +35,73 @@ public class AnalysisController {
             @RequestParam final UUID moeId,
             @RequestParam final UUID regulationId
     ) {
-
         log.info("Starting analysis for MOE={} regulation={}", moeId, regulationId);
+        final UUID analysisId = analysisEngine.analyzeCompliance(moeId, regulationId);
+        return ResponseEntity.ok(new AnalysisResponse(analysisId, "Analysis started"));
+    }
 
-        final UUID analysisId = analysisEngine.analyzeCompliance(
-                moeId,
-                regulationId
-        );
-
+    @GetMapping
+    public ResponseEntity<Page<Map<String, Object>>> listAnalyses(
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
+            Pageable pageable,
+            @RequestParam(required = false) UUID moeId,
+            @RequestParam(required = false) UUID regulationId
+    ) {
         return ResponseEntity.ok(
-                new AnalysisResponse(analysisId, "Analysis started")
+                analysisRepo.findAllWithFetch(moeId, regulationId, pageable)
+                        .map(this::toDto)
         );
     }
 
     @Transactional(readOnly = true)
     @GetMapping("/{id}")
     public ResponseEntity<?> getAnalysisReport(@PathVariable final UUID id) {
-
         return analysisRepo.findWithAll(id)
                 .map(this::buildReport)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    private Map<String, Object> buildReport(final AnalysisResult analysis) {
+    @Transactional(readOnly = true)
+    @GetMapping("/{id}/outcomes")
+    public ResponseEntity<Page<Map<String, Object>>> getAnalysisOutcomes(
+            @PathVariable final UUID id,
+            @PageableDefault(size = 20, sort = "requirementId") final Pageable pageable,
+            @RequestParam(required = false) final String complianceStatus,
+            @RequestParam(required = false) final String findingLevel
+    ) {
+        final Page<ComplianceOutcome> outcomes;
+        if (complianceStatus != null && findingLevel != null) {
+            outcomes = complianceOutcomeRepo.findByAnalysisIdAndComplianceStatusAndFindingLevel(
+                    id, complianceStatus, findingLevel, pageable);
+        } else if (complianceStatus != null) {
+            outcomes = complianceOutcomeRepo.findByAnalysisIdAndComplianceStatus(
+                    id, complianceStatus, pageable);
+        } else if (findingLevel != null) {
+            outcomes = complianceOutcomeRepo.findByAnalysisIdAndFindingLevel(
+                    id, findingLevel, pageable);
+        } else {
+            outcomes = complianceOutcomeRepo.findByAnalysisId(id, pageable);
+        }
 
+        return ResponseEntity.ok(outcomes.map(this::buildComplianceDto));
+    }
+
+    private Map<String, Object> toDto(final AnalysisResult a) {
+        return Map.of(
+                "id", a.getId(),
+                "moeId", a.getMoeDocument().getId(),
+                "regulationId", a.getRegulation().getId(),
+                "status", a.getStatus(),
+                "analysisType", a.getAnalysisType(),
+                "complianceScore", a.getComplianceScore() != null ? a.getComplianceScore() : 0.0,
+                "createdAt", a.getCreatedAt()
+        );
+    }
+
+    private Map<String, Object> buildReport(final AnalysisResult analysis) {
         final List<ComplianceOutcome> outcomes =
                 complianceOutcomeRepo.findByAnalysisId(analysis.getId());
-
         return Map.of(
                 "analysisId", analysis.getId(),
                 "moeId", analysis.getMoeDocument().getId(),
