@@ -111,6 +111,21 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatusException(org.springframework.web.server.ResponseStatusException ex) {
+        final HttpStatus status = (HttpStatus) ex.getStatusCode();
+
+        log.warn("API error ({}): {}", status.value(), ex.getReason());
+
+        return ResponseEntity
+                .status(status)
+                .body(new ErrorResponse(
+                        status.value(),
+                        status.getReasonPhrase(),
+                        ex.getReason(),
+                        LocalDateTime.now()
+                ));
+    }
     /**
      * Standard error response format
      */

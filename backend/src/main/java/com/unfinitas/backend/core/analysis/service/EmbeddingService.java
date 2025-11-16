@@ -1,7 +1,9 @@
 package com.unfinitas.backend.core.analysis.service;
 
 import com.unfinitas.backend.core.analysis.embedding.VectorEmbeddingProvider;
+import com.unfinitas.backend.core.ingestion.model.MoeDocument;
 import com.unfinitas.backend.core.ingestion.model.Paragraph;
+import com.unfinitas.backend.core.ingestion.repository.MoeDocumentRepository;
 import com.unfinitas.backend.core.ingestion.repository.ParagraphRepository;
 import com.unfinitas.backend.core.regulation.model.RegulationClause;
 import com.unfinitas.backend.core.regulation.repository.RegulationClauseRepository;
@@ -16,6 +18,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -30,15 +33,17 @@ public class EmbeddingService {
     private final VectorEmbeddingProvider provider;
     private final ParagraphRepository paragraphRepository;
     private final RegulationClauseRepository clauseRepository;
+    private final MoeDocumentRepository moeDocumentRepository;
 
     @Async
     @Transactional
-    public void generateParagraphEmbeddingsAsync(final List<Paragraph> paragraphs) {
+    public void generateParagraphEmbeddingsAsync(final List<Paragraph> paragraphs, final UUID documentId) {
         if (paragraphs == null || paragraphs.isEmpty()) {
             return;
         }
 
-        log.info("Starting async embedding generation for {} paragraphs", paragraphs.size());
+        log.info("Starting async embedding generation for {} paragraphs (doc={})",
+                paragraphs.size(), documentId);
 
         final List<Paragraph> toEmbed = paragraphs.stream()
                 .filter(p -> p.needsEmbedding(CURRENT_MODEL))
@@ -46,11 +51,28 @@ public class EmbeddingService {
 
         if (toEmbed.isEmpty()) {
             log.info("All paragraphs already have embeddings");
+            markDocumentCompleted(documentId);
             return;
         }
 
         processParagraphsInParallel(toEmbed);
-        log.info("Completed embedding generation for {} paragraphs", toEmbed.size());
+
+        log.info("Completed embedding generation for {} paragraphs (doc={})",
+                toEmbed.size(), documentId);
+
+        markDocumentCompleted(documentId);
+    }
+
+    /** Helper: marks document COMPLETED */
+    private void markDocumentCompleted(final UUID documentId) {
+        try {
+            final MoeDocument doc = moeDocumentRepository.findById(documentId).orElseThrow();
+            doc.markAsCompleted();
+            moeDocumentRepository.save(doc);
+            log.info("Document {} marked as COMPLETED", documentId);
+        } catch (final Exception e) {
+            log.error("Failed to mark document {} as COMPLETED: {}", documentId, e.getMessage());
+        }
     }
 
     @Async

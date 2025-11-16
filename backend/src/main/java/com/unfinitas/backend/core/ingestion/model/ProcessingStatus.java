@@ -1,21 +1,8 @@
 package com.unfinitas.backend.core.ingestion.model;
 
-/**
- * Processing status for MOE document ingestion
- */
 public enum ProcessingStatus {
-    /**
-     * Currently processing the document
-     */
-    PROCESSING,
-
-    /**
-     * Processing completed successfully
-     */
-    COMPLETED,
-
-    /**
-     * Processing failed due to an error
-     */
-    FAILED
+    PROCESSING,   // parsing PDF / extracting sections + paragraphs
+    EMBEDDING,    // paragraphs saved, generating embeddings
+    COMPLETED,    // everything done
+    FAILED        // error in any stage
 }
