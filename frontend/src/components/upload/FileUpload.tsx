@@ -87,7 +87,6 @@ export function FileUpload({
           setMoeId(response.documentId);
           setDocumentId(response.documentId);
 
-          // Notify parent component about the uploaded document
           onDocumentUploaded?.(response.documentId);
 
           setUploadProgress(0);
