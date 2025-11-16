@@ -10,8 +10,9 @@ import { Spinner } from "@/components/ui/shadcn-io/spinner";
 import type { FileRejection } from "react-dropzone";
 import { uploadDocument, pollDocumentStatus } from "@/api/upload/documentApi";
 import { useMoeId } from "@/utils/moeStore";
-import { startAnalysis } from "@/api/analysis/analysisApi";
+import { startAnalysis, getAnalysisReport } from "@/api/analysis/analysisApi";
 import { useDocument } from "@/contexts/DocumentContext";
+import { transformComplianceData } from "@/utils/transformComplianceData";
 import { UploadProgress } from "./progress";
 import type { AnalysisResponse } from "@/types/compliance";
 
@@ -47,7 +48,8 @@ export function FileUpload({
 }: FileUploadProps = {}) {
   const { toast } = useToast();
   const { moeId, setMoeId, clearMoeId } = useMoeId();
-  const { setAnalysisId } = useDocument();
+  const { setAnalysisId, setIsAnalyzing: setContextIsAnalyzing } =
+    useDocument();
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isUploaded, setIsUploaded] = useState(false);
@@ -88,9 +90,9 @@ export function FileUpload({
           // Notify parent component about the uploaded document
           onDocumentUploaded?.(response.documentId);
 
-          // Start polling for document status every 5 seconds
           setUploadProgress(0);
           await pollDocumentStatus(
+            selectedFile,
             response.documentId,
             response.documentId,
             (progress) => {
@@ -152,39 +154,90 @@ export function FileUpload({
       return;
     }
 
-    // Set analyzing state immediately
+    // Set analyzing state immediately (both local and context)
     setIsAnalyzing(true);
+    setContextIsAnalyzing(true);
 
     try {
       // Start the analysis via API immediately when button is clicked
+      // Backend only requires moeId as @RequestParam (no regulationId needed)
       const response = await startAnalysis(currentMoeId);
 
       // Store the analysis ID in context immediately
       setAnalysisId(response.analysisId);
 
-      toast({
-        title: "Analysis started",
-        description:
-          "Analysis is now running. Results will be available shortly.",
-      });
+      // Fetch the analysis report using the analysisId from the response
+      // The report contains all compliance data in the same format as mock.json
+      try {
+        const report = await getAnalysisReport(
+          response.analysisId,
+          currentMoeId
+        );
 
-      // Notify parent if callback is provided
-      if (onAnalysisComplete) {
-        // The actual analysis data will be fetched separately when viewing results
-        onAnalysisComplete({
-          moeId: currentMoeId,
-          analysisId: response.analysisId,
-          totalRequirements: 0,
-          compliance: [],
-          regulationVersion: "",
+        // Transform the compliance data to match component format (like mock.json)
+        const transformedCompliance = transformComplianceData(
+          report.compliance
+        );
+
+        // Stop loading state - data is ready
+        setIsAnalyzing(false);
+        setContextIsAnalyzing(false);
+
+        toast({
+          title: "Analysis complete",
+          description: `Found ${report.totalRequirements} compliance requirements.`,
         });
-      }
 
-      // Keep analyzing state true - will be updated when progress API is implemented
-      // For now, we keep it running to show the user that analysis is in progress
-      // setIsAnalyzing(false); // Will be controlled by progress API later
+        // Notify parent if callback is provided with the actual report data
+        // Transform back to ComplianceRequirement format for the callback
+        if (onAnalysisComplete) {
+          const complianceForCallback = transformedCompliance.map((req) => ({
+            requirement_id: req.requirement_id,
+            compliance_status: req.compliance_status,
+            finding_level: req.finding_level,
+            justification: req.justification,
+            evidence: req.evidence.map((ev) => ({
+              moe_paragraph_id: ev.moe_paragraph_id,
+              relevant_excerpt: ev.relevant_excerpt,
+              similarity_score: ev.similarity_score,
+              rerank_score: ev.rerank_score,
+            })),
+            missing_elements: req.missing_elements,
+            recommended_actions: req.recommended_actions,
+          }));
+
+          onAnalysisComplete({
+            moeId: report.moeId,
+            analysisId: report.analysisId,
+            totalRequirements: report.totalRequirements,
+            compliance: complianceForCallback,
+            regulationVersion: report.regulationVersion,
+          });
+        }
+      } catch (reportError) {
+        // If report fetch fails, analysis might still be processing
+        // Keep loading state and show a message
+        console.warn("Analysis report not yet available:", reportError);
+        toast({
+          title: "Analysis started",
+          description:
+            "Analysis is running. Results will be available shortly.",
+        });
+
+        // Notify parent with basic info
+        if (onAnalysisComplete) {
+          onAnalysisComplete({
+            moeId: currentMoeId,
+            analysisId: response.analysisId,
+            totalRequirements: 0,
+            compliance: [],
+            regulationVersion: "",
+          });
+        }
+      }
     } catch (error) {
       setIsAnalyzing(false);
+      setContextIsAnalyzing(false);
       const errorMessage =
         error instanceof Error ? error.message : "Failed to start analysis";
       toast({
@@ -202,6 +255,7 @@ export function FileUpload({
     toast,
     onAnalysisComplete,
     setAnalysisId,
+    setContextIsAnalyzing,
   ]);
 
   return (
@@ -299,6 +353,8 @@ export function FileUpload({
                     setDocumentId(null);
                     clearMoeId();
                     setAnalysisId(null);
+                    setIsAnalyzing(false);
+                    setContextIsAnalyzing(false);
                     onFileNameChange?.(null);
                   }}
                   className="text-muted-foreground hover:text-foreground transition-colors ml-4 shrink-0 cursor-pointer hover:scale-110 active:scale-95"

@@ -55,6 +55,9 @@ export interface ComplianceOutcomeDto {
 /**
  * Start a new compliance analysis
  *
+ * Backend endpoint: POST /api/analysis?moeId={uuid}
+ * Backend only requires moeId as @RequestParam (no regulationId needed - it auto-detects)
+ *
  * @param moeId MOE ID (should come from Redux using useMoeId() hook)
  * @returns Analysis ID
  */
@@ -68,6 +71,7 @@ export async function startAnalysis(
   }
 
   // Build URL with query parameter - backend expects moeId as @RequestParam
+  // Backend auto-detects regulationId from database (expects exactly one regulation)
   const url = `${API_BASE}?moeId=${encodeURIComponent(moeId)}`;
 
   // Use fetch directly to ensure POST method with query params works correctly
