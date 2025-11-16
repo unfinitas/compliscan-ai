@@ -8,11 +8,10 @@ import { Upload } from "lucide-react";
 import { HoverBorderGradient } from "@/components/ui/hover-border-gradient";
 import { Spinner } from "@/components/ui/shadcn-io/spinner";
 import type { FileRejection } from "react-dropzone";
-import { uploadDocument } from "@/api/upload/documentApi";
+import { uploadDocument, pollDocumentStatus } from "@/api/upload/documentApi";
 import { useMoeId } from "@/utils/moeStore";
 import { startAnalysis } from "@/api/analysis/analysisApi";
 import { useDocument } from "@/contexts/DocumentContext";
-import { config } from "@/config/env";
 import { UploadProgress } from "./progress";
 import type { AnalysisResponse } from "@/types/compliance";
 
@@ -55,6 +54,7 @@ export function FileUpload({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [showProgress, setShowProgress] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const handleFileUpload = useCallback(
     async (acceptedFiles: File[], fileRejections: FileRejection[]) => {
@@ -78,9 +78,6 @@ export function FileUpload({
         onFileNameChange?.(formatFileName(selectedFile.name));
 
         try {
-          // Start the progress bar (3 minutes = 180 seconds)
-          const progressDuration = 3 * 60; // 3 minutes in seconds
-
           // Upload the document
           const response = await uploadDocument(selectedFile, null);
 
@@ -91,17 +88,27 @@ export function FileUpload({
           // Notify parent component about the uploaded document
           onDocumentUploaded?.(response.documentId);
 
-          // Wait for progress to complete (3 minutes total)
-          setTimeout(() => {
-            setIsUploading(false);
-            setIsUploaded(true);
-            setShowProgress(false);
+          // Start polling for document status every 5 seconds
+          setUploadProgress(0);
+          await pollDocumentStatus(
+            response.documentId,
+            response.documentId,
+            (progress) => {
+              setUploadProgress(progress);
+            },
+            5000 // Poll every 5 seconds
+          );
 
-            toast({
-              title: "File uploaded successfully!",
-              description: `${selectedFile.name} has been uploaded and processing has started.`,
-            });
-          }, progressDuration * 1000);
+          // Processing complete
+          setIsUploading(false);
+          setIsUploaded(true);
+          setShowProgress(false);
+          setUploadProgress(100);
+
+          toast({
+            title: "File uploaded successfully!",
+            description: `${selectedFile.name} has been uploaded and processing is complete.`,
+          });
         } catch (error) {
           setIsUploading(false);
           setIsUploaded(false);
@@ -123,35 +130,19 @@ export function FileUpload({
   );
 
   const handleAnalyze = useCallback(async () => {
-    console.log("🔵 handleAnalyze called", {
-      isAnalyzing,
-      file: !!file,
-      isUploaded,
-      documentId,
-      moeId,
-    });
-
     // Prevent multiple clicks
     if (isAnalyzing) {
-      console.log("⚠️ Already analyzing, skipping");
       return;
     }
 
     if (!file || !isUploaded || !documentId) {
-      console.log("⚠️ Missing prerequisites", {
-        file: !!file,
-        isUploaded,
-        documentId,
-      });
       return;
     }
 
     // Get moeId from Redux (should be set after document upload)
     const currentMoeId = moeId || documentId;
-    console.log("📋 Current MOE ID:", currentMoeId);
 
     if (!currentMoeId) {
-      console.log("❌ No MOE ID available");
       toast({
         title: "Configuration error",
         description:
@@ -161,35 +152,15 @@ export function FileUpload({
       return;
     }
 
-    if (!config.defaultRegulationId) {
-      console.log("❌ No regulation ID configured");
-      toast({
-        title: "Configuration error",
-        description:
-          "Regulation ID is not configured. Please set NEXT_PUBLIC_DEFAULT_REGULATION_ID in your .env.local file. Query your database: SELECT id FROM regulations WHERE active = true LIMIT 1;",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    console.log("✅ Starting analysis with:", {
-      currentMoeId,
-      regulationId: config.defaultRegulationId,
-    });
-
     // Set analyzing state immediately
     setIsAnalyzing(true);
 
     try {
-      console.log("🚀 Calling startAnalysis API...");
       // Start the analysis via API immediately when button is clicked
-      // moeId comes from Redux (passed as parameter), regulationVersion is sent in body from config
       const response = await startAnalysis(currentMoeId);
-      console.log("✅ Analysis API response:", response);
 
       // Store the analysis ID in context immediately
       setAnalysisId(response.analysisId);
-      console.log("💾 Stored analysis ID:", response.analysisId);
 
       toast({
         title: "Analysis started",
@@ -205,7 +176,7 @@ export function FileUpload({
           analysisId: response.analysisId,
           totalRequirements: 0,
           compliance: [],
-          regulationVersion: config.regulationVersion,
+          regulationVersion: "",
         });
       }
 
@@ -213,7 +184,6 @@ export function FileUpload({
       // For now, we keep it running to show the user that analysis is in progress
       // setIsAnalyzing(false); // Will be controlled by progress API later
     } catch (error) {
-      console.log("❌ Analysis API error:", error);
       setIsAnalyzing(false);
       const errorMessage =
         error instanceof Error ? error.message : "Failed to start analysis";
@@ -283,7 +253,7 @@ export function FileUpload({
                   {file.name ? formatFileName(file.name) : "Uploading..."}
                 </h3>
               </div>
-              <UploadProgress duration={3 * 60} />
+              <UploadProgress progress={uploadProgress} />
             </div>
           ) : isUploading ? (
             <div className="flex flex-col items-center justify-center p-8">
@@ -347,7 +317,6 @@ export function FileUpload({
                     }
                     e.preventDefault();
                     e.stopPropagation();
-                    console.log("🟢 Button clicked!");
                     handleAnalyze();
                   }}
                   containerClassName="rounded-full"

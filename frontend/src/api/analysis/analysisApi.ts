@@ -2,7 +2,6 @@
 
 import { sendRequestWithResponse } from "@/utils/gateway";
 import { RequestEnum } from "@/utils/requestEnum";
-import { config } from "@/config/env";
 
 const API_BASE = `${
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080"
@@ -56,32 +55,20 @@ export interface ComplianceOutcomeDto {
 /**
  * Start a new compliance analysis
  *
- * @param moeId Optional moeId to include in the request (should come from Redux using useMoeId() hook)
- * @param regulationId Optional regulation UUID (defaults to config.defaultRegulationId)
+ * @param moeId MOE ID (should come from Redux using useMoeId() hook)
  * @returns Analysis ID
  */
 export async function startAnalysis(
-  moeId: string | null = null,
-  regulationId?: string
+  moeId: string | null = null
 ): Promise<StartAnalysisResponse> {
-  const regId = regulationId || config.defaultRegulationId;
-
-  if (!regId) {
-    throw new Error(
-      "Regulation ID is not configured. Please set NEXT_PUBLIC_DEFAULT_REGULATION_ID in your .env.local file."
-    );
-  }
-
   if (!moeId) {
     throw new Error(
       "MOE ID is required. Please ensure a document is uploaded and moeId is available in Redux store."
     );
   }
 
-  // Build URL with query parameters - backend expects both as @RequestParam
-  const url = `${API_BASE}?moeId=${encodeURIComponent(
-    moeId
-  )}&regulationId=${encodeURIComponent(regId)}`;
+  // Build URL with query parameter - backend expects moeId as @RequestParam
+  const url = `${API_BASE}?moeId=${encodeURIComponent(moeId)}`;
 
   // Use fetch directly to ensure POST method with query params works correctly
   const baseUrl =
