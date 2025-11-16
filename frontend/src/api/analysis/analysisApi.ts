@@ -56,22 +56,15 @@ export interface ComplianceOutcomeDto {
 /**
  * Start a new compliance analysis
  *
- * @param moeId Document UUID (from Redux store - use useMoeId() hook to get it)
+ * @param moeId Optional moeId to include in the request (should come from Redux using useMoeId() hook)
  * @param regulationId Optional regulation UUID (defaults to config.defaultRegulationId)
  * @returns Analysis ID
- *
- * Note:
- * - moeId should be obtained from Redux using useMoeId() hook
- * - moeId is included in both URL query params and request body (via gateway)
- * - regulationVersion is automatically included in the request body from config (NEXT_PUBLIC_REGULATION_VERSION)
- * - regulationId is sent as query parameter (from NEXT_PUBLIC_DEFAULT_REGULATION_ID or passed parameter)
  */
 export async function startAnalysis(
-  moeId: string,
+  moeId: string | null = null,
   regulationId?: string
 ): Promise<StartAnalysisResponse> {
   const regId = regulationId || config.defaultRegulationId;
-  const regulationVersion = config.regulationVersion;
 
   if (!regId) {
     throw new Error(
@@ -79,18 +72,40 @@ export async function startAnalysis(
     );
   }
 
-  const url = `${API_BASE}?moeId=${moeId}&regulationId=${regId}`;
+  if (!moeId) {
+    throw new Error(
+      "MOE ID is required. Please ensure a document is uploaded and moeId is available in Redux store."
+    );
+  }
 
-  // Pass moeId to gateway - it will be added to the request body for POST requests
-  // moeId is also in the URL query params for @RequestParam
-  return sendRequestWithResponse<StartAnalysisResponse>(
-    moeId,
-    RequestEnum.POST,
-    url,
-    {
-      regulationVersion: regulationVersion,
-    }
-  );
+  // Build URL with query parameters - backend expects both as @RequestParam
+  const url = `${API_BASE}?moeId=${encodeURIComponent(
+    moeId
+  )}&regulationId=${encodeURIComponent(regId)}`;
+
+  // Use fetch directly to ensure POST method with query params works correctly
+  const baseUrl =
+    process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
+  const fullUrl = url.startsWith("http")
+    ? url
+    : `${baseUrl.replace(/\/$/, "")}/${url.replace(/^\//, "")}`;
+
+  const response = await fetch(fullUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: undefined,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Request failed: ${response.status} ${response.statusText}. ${errorText}`
+    );
+  }
+
+  return response.json();
 }
 
 /**

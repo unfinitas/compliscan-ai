@@ -13,16 +13,38 @@ import { useMoeId } from "@/utils/moeStore";
 import { startAnalysis } from "@/api/analysis/analysisApi";
 import { useDocument } from "@/contexts/DocumentContext";
 import { config } from "@/config/env";
+import { UploadProgress } from "./progress";
 import type { AnalysisResponse } from "@/types/compliance";
+
+/**
+ * Format file name to show first 4 words with .pdf extension
+ */
+function formatFileName(fileName: string): string {
+  if (!fileName) return "";
+
+  // Remove .pdf extension temporarily
+  const nameWithoutExt = fileName.replace(/\.pdf$/i, "");
+
+  // Split into words
+  const words = nameWithoutExt.split(/[\s_-]+/).filter(Boolean);
+
+  // Take first 4 words
+  const firstFourWords = words.slice(0, 4).join(" ");
+
+  // Add .pdf extension back
+  return firstFourWords ? `${firstFourWords}.pdf` : fileName;
+}
 
 interface FileUploadProps {
   onDocumentUploaded?: (documentId: string) => void;
   onAnalysisComplete?: (analysisData: AnalysisResponse) => void;
+  onFileNameChange?: (fileName: string | null) => void;
 }
 
 export function FileUpload({
   onDocumentUploaded,
   onAnalysisComplete,
+  onFileNameChange,
 }: FileUploadProps = {}) {
   const { toast } = useToast();
   const { moeId, setMoeId, clearMoeId } = useMoeId();
@@ -32,6 +54,7 @@ export function FileUpload({
   const [isUploaded, setIsUploaded] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [documentId, setDocumentId] = useState<string | null>(null);
+  const [showProgress, setShowProgress] = useState(false);
 
   const handleFileUpload = useCallback(
     async (acceptedFiles: File[], fileRejections: FileRejection[]) => {
@@ -51,8 +74,14 @@ export function FileUpload({
         setIsUploaded(false);
         setIsUploading(true);
         setDocumentId(null);
+        setShowProgress(true);
+        onFileNameChange?.(formatFileName(selectedFile.name));
 
         try {
+          // Start the progress bar (3 minutes = 180 seconds)
+          const progressDuration = 3 * 60; // 3 minutes in seconds
+
+          // Upload the document
           const response = await uploadDocument(selectedFile, null);
 
           // Store the document ID (moeId) in Redux
@@ -62,17 +91,23 @@ export function FileUpload({
           // Notify parent component about the uploaded document
           onDocumentUploaded?.(response.documentId);
 
-          setIsUploading(false);
-          setIsUploaded(true);
+          // Wait for progress to complete (3 minutes total)
+          setTimeout(() => {
+            setIsUploading(false);
+            setIsUploaded(true);
+            setShowProgress(false);
 
-          toast({
-            title: "File uploaded successfully!",
-            description: `${selectedFile.name} has been uploaded and processing has started.`,
-          });
+            toast({
+              title: "File uploaded successfully!",
+              description: `${selectedFile.name} has been uploaded and processing has started.`,
+            });
+          }, progressDuration * 1000);
         } catch (error) {
           setIsUploading(false);
           setIsUploaded(false);
           setFile(null);
+          setShowProgress(false);
+          onFileNameChange?.(null);
 
           const errorMessage =
             error instanceof Error ? error.message : "Failed to upload file";
@@ -84,48 +119,82 @@ export function FileUpload({
         }
       }
     },
-    [toast, setMoeId, onDocumentUploaded]
+    [toast, setMoeId, onDocumentUploaded, onFileNameChange]
   );
 
   const handleAnalyze = useCallback(async () => {
-    if (!file || !isUploaded || !documentId) return;
+    console.log("🔵 handleAnalyze called", {
+      isAnalyzing,
+      file: !!file,
+      isUploaded,
+      documentId,
+      moeId,
+    });
+
+    // Prevent multiple clicks
+    if (isAnalyzing) {
+      console.log("⚠️ Already analyzing, skipping");
+      return;
+    }
+
+    if (!file || !isUploaded || !documentId) {
+      console.log("⚠️ Missing prerequisites", {
+        file: !!file,
+        isUploaded,
+        documentId,
+      });
+      return;
+    }
 
     // Get moeId from Redux (should be set after document upload)
     const currentMoeId = moeId || documentId;
+    console.log("📋 Current MOE ID:", currentMoeId);
 
     if (!currentMoeId) {
+      console.log("❌ No MOE ID available");
       toast({
         title: "Configuration error",
-        description: "Document ID is not available. Please upload a document first.",
+        description:
+          "Document ID is not available. Please upload a document first.",
         variant: "destructive",
       });
       return;
     }
 
     if (!config.defaultRegulationId) {
+      console.log("❌ No regulation ID configured");
       toast({
         title: "Configuration error",
-        description: "Regulation ID is not configured. Please set NEXT_PUBLIC_DEFAULT_REGULATION_ID in your .env.local file. Query your database: SELECT id FROM regulations WHERE active = true LIMIT 1;",
+        description:
+          "Regulation ID is not configured. Please set NEXT_PUBLIC_DEFAULT_REGULATION_ID in your .env.local file. Query your database: SELECT id FROM regulations WHERE active = true LIMIT 1;",
         variant: "destructive",
       });
       return;
     }
 
+    console.log("✅ Starting analysis with:", {
+      currentMoeId,
+      regulationId: config.defaultRegulationId,
+    });
+
+    // Set analyzing state immediately
     setIsAnalyzing(true);
 
     try {
-      // Start the analysis via API
-      // moeId comes from Redux, regulationVersion is sent in body from config
+      console.log("🚀 Calling startAnalysis API...");
+      // Start the analysis via API immediately when button is clicked
+      // moeId comes from Redux (passed as parameter), regulationVersion is sent in body from config
       const response = await startAnalysis(currentMoeId);
+      console.log("✅ Analysis API response:", response);
 
-      // Store the analysis ID in context
+      // Store the analysis ID in context immediately
       setAnalysisId(response.analysisId);
-
-      setIsAnalyzing(false);
+      console.log("💾 Stored analysis ID:", response.analysisId);
 
       toast({
         title: "Analysis started",
-        description: "Analysis has been initiated. Results will be available shortly.",
+        description:
+          "Analysis is now running. Results will be available shortly.",
       });
 
       // Notify parent if callback is provided
@@ -139,7 +208,12 @@ export function FileUpload({
           regulationVersion: config.regulationVersion,
         });
       }
+
+      // Keep analyzing state true - will be updated when progress API is implemented
+      // For now, we keep it running to show the user that analysis is in progress
+      // setIsAnalyzing(false); // Will be controlled by progress API later
     } catch (error) {
+      console.log("❌ Analysis API error:", error);
       setIsAnalyzing(false);
       const errorMessage =
         error instanceof Error ? error.message : "Failed to start analysis";
@@ -149,14 +223,23 @@ export function FileUpload({
         variant: "destructive",
       });
     }
-  }, [file, isUploaded, documentId, moeId, toast, onAnalysisComplete, setAnalysisId]);
+  }, [
+    file,
+    isUploaded,
+    documentId,
+    moeId,
+    isAnalyzing,
+    toast,
+    onAnalysisComplete,
+    setAnalysisId,
+  ]);
 
   return (
     <div className="w-full">
       {/* Upload Instructions */}
       <div className="mb-4 p-3 rounded-md bg-muted/50 border border-border">
         <p className="text-sm text-muted-foreground text-center">
-          Only support for PDF file and only English
+          For now only support for PDF file and only English
         </p>
       </div>
 
@@ -193,20 +276,44 @@ export function FileUpload({
         </Dropzone>
       ) : (
         <div className="space-y-4">
-          {isUploading ? (
+          {isUploading && showProgress ? (
+            <div className="rounded-lg border border-border bg-card/50 p-8">
+              <div className="mb-4 text-center">
+                <h3 className="text-lg font-semibold text-foreground mb-2">
+                  {file.name ? formatFileName(file.name) : "Uploading..."}
+                </h3>
+              </div>
+              <UploadProgress duration={3 * 60} />
+            </div>
+          ) : isUploading ? (
             <div className="flex flex-col items-center justify-center p-8">
               <Spinner variant="circle" size={32} className="text-foreground" />
             </div>
           ) : isAnalyzing ? (
-            <div className="flex flex-col items-center justify-center p-8">
-              <Spinner variant="circle" size={32} className="text-foreground" />
+            <div className="rounded-lg border border-border bg-card/50 p-8">
+              <div className="flex flex-col items-center justify-center space-y-4">
+                <Spinner
+                  variant="circle"
+                  size={32}
+                  className="text-foreground"
+                />
+                <div className="text-center">
+                  <p className="text-lg font-semibold text-foreground mb-2">
+                    Analyzing Document
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Processing compliance requirements. This may take a few
+                    minutes...
+                  </p>
+                </div>
+              </div>
             </div>
           ) : isUploaded ? (
             <div className="rounded-lg border border-border bg-card/50 p-12 min-h-[400px] flex flex-col justify-between">
               <div className="flex items-start justify-between mb-8">
                 <div className="flex-1 min-w-0 pr-4">
                   <h3 className="text-xl font-semibold text-foreground mb-3 wrap-break-word">
-                    {file.name}
+                    {formatFileName(file.name)}
                   </h3>
                   <p className="text-base text-muted-foreground">
                     File size: {(file.size / 1024 / 1024).toFixed(2)} MB
@@ -222,8 +329,9 @@ export function FileUpload({
                     setDocumentId(null);
                     clearMoeId();
                     setAnalysisId(null);
+                    onFileNameChange?.(null);
                   }}
-                  className="text-muted-foreground hover:text-foreground transition-colors ml-4 shrink-0"
+                  className="text-muted-foreground hover:text-foreground transition-colors ml-4 shrink-0 cursor-pointer hover:scale-110 active:scale-95"
                 >
                   <X className="h-6 w-6" />
                 </button>
@@ -231,12 +339,39 @@ export function FileUpload({
               <div className="flex justify-center">
                 <HoverBorderGradient
                   as="button"
-                  onClick={handleAnalyze}
+                  onClick={(e) => {
+                    if (isAnalyzing) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return;
+                    }
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log("🟢 Button clicked!");
+                    handleAnalyze();
+                  }}
                   containerClassName="rounded-full"
-                  className="bg-black text-white flex items-center space-x-2 px-8 py-4 text-lg"
+                  className={`bg-black text-white flex items-center space-x-2 px-8 py-4 text-lg ${
+                    isAnalyzing
+                      ? "opacity-50 cursor-not-allowed pointer-events-none"
+                      : "cursor-pointer hover:opacity-90 active:opacity-80"
+                  }`}
                 >
-                  <Sparkles className="h-5 w-5" />
-                  <span>Analyze Document</span>
+                  {isAnalyzing ? (
+                    <>
+                      <Spinner
+                        variant="circle"
+                        size={20}
+                        className="text-white"
+                      />
+                      <span>Analyzing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-5 w-5" />
+                      <span>Analyze Document</span>
+                    </>
+                  )}
                 </HoverBorderGradient>
               </div>
             </div>
