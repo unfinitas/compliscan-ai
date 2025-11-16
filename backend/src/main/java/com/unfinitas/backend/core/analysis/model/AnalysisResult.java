@@ -4,6 +4,7 @@ import com.unfinitas.backend.core.analysis.model.enums.AnalysisStatus;
 import com.unfinitas.backend.core.analysis.model.enums.AnalysisType;
 import com.unfinitas.backend.core.analysis.model.enums.ApprovalRecommendation;
 import com.unfinitas.backend.core.ingestion.model.MoeDocument;
+import com.unfinitas.backend.core.regulation.model.Regulation;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -32,12 +33,10 @@ public class AnalysisResult {
     @Column(columnDefinition = "UUID")
     private UUID id;
 
-    // The MOE being analyzed
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "moe_id", nullable = false)
     private MoeDocument moeDocument;
 
-    // Optional: Base MOE for comparison
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "base_moe_id")
     private MoeDocument baseMoeDocument;
@@ -46,14 +45,14 @@ public class AnalysisResult {
     @Column(name = "analysis_type", nullable = false, length = 30)
     private AnalysisType analysisType;
 
-    @Column(name = "regulation_version", length = 50)
-    private String regulationVersion;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "regulation_id", nullable = false)
+    private Regulation regulation;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private AnalysisStatus status;
 
-    // Statistics
     @Column(name = "total_items")
     private Integer totalItems;
 
@@ -69,7 +68,6 @@ public class AnalysisResult {
     @Builder.Default
     private Integer missingCount = 0;
 
-    // Overall compliance score (0-100)
     @Column(name = "compliance_score", precision = 5, scale = 2)
     private BigDecimal complianceScore;
 
@@ -95,7 +93,6 @@ public class AnalysisResult {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
-    // Relationships
     @OneToMany(mappedBy = "analysisResult", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<CoverageResult> coverageResults = new ArrayList<>();
@@ -108,18 +105,16 @@ public class AnalysisResult {
     @Builder.Default
     private List<GapFinding> gapFindings = new ArrayList<>();
 
-    // Lifecycle hooks
+    @OneToMany(mappedBy = "analysis", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<ComplianceOutcome> complianceOutcomes = new ArrayList<>();
+
     @PrePersist
     protected void onCreate() {
-        if (createdAt == null) {
-            createdAt = LocalDateTime.now();
-        }
-        if (status == null) {
-            status = AnalysisStatus.PENDING;
-        }
+        if (createdAt == null) createdAt = LocalDateTime.now();
+        if (status == null) status = AnalysisStatus.PENDING;
     }
 
-    // Domain methods
     public void start() {
         this.status = AnalysisStatus.IN_PROGRESS;
         this.startedAt = LocalDateTime.now();
@@ -154,6 +149,11 @@ public class AnalysisResult {
     public void addGapFinding(final GapFinding gap) {
         gapFindings.add(gap);
         gap.setAnalysisResult(this);
+    }
+
+    public void addComplianceOutcome(final ComplianceOutcome outcome) {
+        complianceOutcomes.add(outcome);
+        outcome.setAnalysis(this);
     }
 
     public double getCompliancePercentage() {

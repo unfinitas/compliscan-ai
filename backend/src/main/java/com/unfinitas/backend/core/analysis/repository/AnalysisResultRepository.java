@@ -17,6 +17,16 @@ import java.util.UUID;
 @Repository
 public interface AnalysisResultRepository extends JpaRepository<AnalysisResult, UUID> {
 
+    @Query("""
+                select a
+                from AnalysisResult a
+                join fetch a.regulation
+                join fetch a.moeDocument
+                where a.id = :id
+            """)
+    Optional<AnalysisResult> findWithAll(@Param("id") UUID id);
+
+
     // Find all analyses for a MOE
     List<AnalysisResult> findByMoeDocumentOrderByCreatedAtDesc(MoeDocument moeDocument);
 

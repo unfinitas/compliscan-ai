@@ -10,7 +10,7 @@ import java.util.UUID;
 @Repository
 public interface RegulationClauseRepository extends JpaRepository<RegulationClause, UUID> {
 
-    List<RegulationClause> findByRegulationVersionOrderByClauseNumberAsc(String regulationVersion);
+    List<RegulationClause> findByRegulationIdOrderByClauseNumberAsc(UUID regulationVersion);
 
     List<RegulationClause> findByEmbeddingIsNull();
 

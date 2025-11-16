@@ -13,23 +13,24 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class EmbeddingService {
     private static final String CURRENT_MODEL = "gemini-embedding-001";
-    private static final int BATCH_SIZE = 100;
+    private static final int BATCH_SIZE = 100; // Match provider batch size
+    private static final int PARALLEL_BATCHES = 4; // Process 4 batches in parallel
 
     private final VectorEmbeddingProvider provider;
     private final ParagraphRepository paragraphRepository;
     private final RegulationClauseRepository clauseRepository;
 
-    /**
-     * Generate embeddings for paragraphs asynchronously during ingestion
-     */
     @Async
     @Transactional
     public void generateParagraphEmbeddingsAsync(final List<Paragraph> paragraphs) {
@@ -48,13 +49,10 @@ public class EmbeddingService {
             return;
         }
 
-        processParagraphsInBatches(toEmbed);
+        processParagraphsInParallel(toEmbed);
         log.info("Completed embedding generation for {} paragraphs", toEmbed.size());
     }
 
-    /**
-     * Generate embeddings for regulation clauses asynchronously
-     */
     @Async
     @Transactional
     public void generateClauseEmbeddingsAsync(final List<RegulationClause> clauses) {
@@ -73,89 +71,129 @@ public class EmbeddingService {
             return;
         }
 
-        processClausesInBatches(toEmbed);
+        processClausesInParallel(toEmbed);
         log.info("Completed embedding generation for {} clauses", toEmbed.size());
     }
 
-    /**
-     * Scheduled job to generate missing embeddings (runs daily at 2 AM)
-     */
     @Scheduled(cron = "0 0 2 * * *")
     @Transactional
     public void generateMissingEmbeddings() {
         log.info("Running scheduled embedding generation");
 
-        // Process paragraphs without embeddings
         final List<Paragraph> paragraphsNeedingEmbedding = paragraphRepository.findByEmbeddingIsNull();
         if (!paragraphsNeedingEmbedding.isEmpty()) {
             log.info("Found {} paragraphs without embeddings", paragraphsNeedingEmbedding.size());
-            processParagraphsInBatches(paragraphsNeedingEmbedding);
+            processParagraphsInParallel(paragraphsNeedingEmbedding);
         }
 
-        // Process clauses without embeddings
         final List<RegulationClause> clausesNeedingEmbedding = clauseRepository.findByEmbeddingIsNull();
         if (!clausesNeedingEmbedding.isEmpty()) {
             log.info("Found {} clauses without embeddings", clausesNeedingEmbedding.size());
-            processClausesInBatches(clausesNeedingEmbedding);
+            processClausesInParallel(clausesNeedingEmbedding);
         }
 
         log.info("Scheduled embedding generation complete");
     }
 
-    private void processParagraphsInBatches(final List<Paragraph> paragraphs) {
-        for (int i = 0; i < paragraphs.size(); i += BATCH_SIZE) {
-            final int end = Math.min(i + BATCH_SIZE, paragraphs.size());
-            final List<Paragraph> batch = paragraphs.subList(i, end);
+    private void processParagraphsInParallel(final List<Paragraph> paragraphs) {
+        final long startTime = System.currentTimeMillis();
 
-            try {
-                final Map<String, List<Double>> embeddings = provider.embedBatch(
-                        batch.stream().map(Paragraph::getContent).toList()
-                );
+        // Split into super-batches for parallel processing
+        final List<List<Paragraph>> superBatches = partitionList(paragraphs, BATCH_SIZE);
 
-                for (final Paragraph p : batch) {
-                    final List<Double> embedding = embeddings.get(p.getContent());
-                    if (embedding != null && !embedding.isEmpty()) {
-                        p.setEmbeddingFromArray(toFloatArray(embedding));
-                        p.setEmbeddingModel(CURRENT_MODEL);
-                        p.setEmbeddedAt(Instant.now());
-                    }
+        // Process PARALLEL_BATCHES at a time
+        for (int i = 0; i < superBatches.size(); i += PARALLEL_BATCHES) {
+            final int end = Math.min(i + PARALLEL_BATCHES, superBatches.size());
+            final List<CompletableFuture<Void>> futures = superBatches.subList(i, end).stream()
+                    .map(batch -> CompletableFuture.runAsync(() ->
+                            processParagraphBatch(batch)))
+                    .toList();
+
+            // Wait for this round to complete
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+            log.info("Processed {}/{} batches", end, superBatches.size());
+        }
+
+        final long elapsed = System.currentTimeMillis() - startTime;
+        log.info("Embedded {} paragraphs in {}ms ({}ms/paragraph)",
+                paragraphs.size(), elapsed, elapsed / paragraphs.size());
+    }
+
+    private void processClausesInParallel(final List<RegulationClause> clauses) {
+        final long startTime = System.currentTimeMillis();
+
+        final List<List<RegulationClause>> superBatches = partitionList(clauses, BATCH_SIZE);
+
+        for (int i = 0; i < superBatches.size(); i += PARALLEL_BATCHES) {
+            final int end = Math.min(i + PARALLEL_BATCHES, superBatches.size());
+            final List<CompletableFuture<Void>> futures = superBatches.subList(i, end).stream()
+                    .map(batch -> CompletableFuture.runAsync(() ->
+                            processClauseBatch(batch)))
+                    .toList();
+
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+            log.info("Processed {}/{} batches", end, superBatches.size());
+        }
+
+        final long elapsed = System.currentTimeMillis() - startTime;
+        log.info("Embedded {} clauses in {}ms ({}ms/clause)",
+                clauses.size(), elapsed, elapsed / clauses.size());
+    }
+
+    private void processParagraphBatch(final List<Paragraph> batch) {
+        try {
+            final List<String> texts = batch.stream()
+                    .map(Paragraph::getContent)
+                    .collect(Collectors.toList());
+
+            final Map<String, List<Double>> embeddings = provider.embedBatch(texts);
+
+            for (final Paragraph p : batch) {
+                final List<Double> embedding = embeddings.get(p.getContent());
+                if (embedding != null && !embedding.isEmpty()) {
+                    p.setEmbeddingFromArray(toFloatArray(embedding));
+                    p.setEmbeddingModel(CURRENT_MODEL);
+                    p.setEmbeddedAt(Instant.now());
                 }
-
-                paragraphRepository.saveAll(batch);
-                log.debug("Processed batch {}-{} of {} paragraphs", i, end, paragraphs.size());
-
-            } catch (final Exception ex) {
-                log.error("Error processing paragraph batch {}-{}: {}", i, end, ex.getMessage(), ex);
             }
+
+            paragraphRepository.saveAll(batch);
+
+        } catch (final Exception ex) {
+            log.error("Error processing paragraph batch: {}", ex.getMessage(), ex);
         }
     }
 
-    private void processClausesInBatches(final List<RegulationClause> clauses) {
-        for (int i = 0; i < clauses.size(); i += BATCH_SIZE) {
-            final int end = Math.min(i + BATCH_SIZE, clauses.size());
-            final List<RegulationClause> batch = clauses.subList(i, end);
+    private void processClauseBatch(final List<RegulationClause> batch) {
+        try {
+            final List<String> texts = batch.stream()
+                    .map(RegulationClause::getContent)
+                    .collect(Collectors.toList());
 
-            try {
-                final Map<String, List<Double>> embeddings = provider.embedBatch(
-                        batch.stream().map(RegulationClause::getContent).toList()
-                );
+            final Map<String, List<Double>> embeddings = provider.embedBatch(texts);
 
-                for (final RegulationClause c : batch) {
-                    final List<Double> embedding = embeddings.get(c.getContent());
-                    if (embedding != null && !embedding.isEmpty()) {
-                        c.setEmbeddingFromArray(toFloatArray(embedding));
-                        c.setEmbeddingModel(CURRENT_MODEL);
-                        c.setEmbeddedAt(Instant.now());
-                    }
+            for (final RegulationClause c : batch) {
+                final List<Double> embedding = embeddings.get(c.getContent());
+                if (embedding != null && !embedding.isEmpty()) {
+                    c.setEmbeddingFromArray(toFloatArray(embedding));
+                    c.setEmbeddingModel(CURRENT_MODEL);
+                    c.setEmbeddedAt(Instant.now());
                 }
-
-                clauseRepository.saveAll(batch);
-                log.debug("Processed batch {}-{} of {} clauses", i, end, clauses.size());
-
-            } catch (final Exception ex) {
-                log.error("Error processing clause batch {}-{}: {}", i, end, ex.getMessage(), ex);
             }
+
+            clauseRepository.saveAll(batch);
+
+        } catch (final Exception ex) {
+            log.error("Error processing clause batch: {}", ex.getMessage(), ex);
         }
+    }
+
+    private <T> List<List<T>> partitionList(final List<T> list, final int size) {
+        return new ArrayList<>(list.stream()
+                .collect(Collectors.groupingBy(item -> list.indexOf(item) / size))
+                .values());
     }
 
     private float[] toFloatArray(final List<Double> doubles) {
@@ -166,9 +204,6 @@ public class EmbeddingService {
         return floats;
     }
 
-    /**
-     * Get embedding statistics
-     */
     @Transactional(readOnly = true)
     public Map<String, Object> getEmbeddingStats() {
         final long totalParagraphs = paragraphRepository.count();
@@ -179,6 +214,7 @@ public class EmbeddingService {
 
         return Map.of(
                 "model", CURRENT_MODEL,
+                "dimension", 768,
                 "paragraphs", Map.of(
                         "total", totalParagraphs,
                         "embedded", embeddedParagraphs,

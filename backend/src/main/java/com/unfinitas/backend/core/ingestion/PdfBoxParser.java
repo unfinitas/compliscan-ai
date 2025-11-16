@@ -23,6 +23,9 @@ public class PdfBoxParser implements PdfParser {
 
     @Override
     public ParsedPdfResult parse(final InputStream inputStream, final String fileName) {
+        System.setProperty("pdfbox.fontcache", "none");
+        System.setProperty("pdfbox.systemfontdir", "");
+
         log.debug("Starting PDF parsing for file: {}", fileName);
 
         Path tempFile = null;

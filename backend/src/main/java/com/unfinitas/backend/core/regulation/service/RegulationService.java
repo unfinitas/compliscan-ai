@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @Slf4j
@@ -17,13 +18,13 @@ public class RegulationService {
     private final RegulationClauseRepository regulationClauseRepository;
 
     @Transactional(readOnly = true)
-    public List<RegulationClause> loadClauses(final String regulationVersion) {
-        log.info("Loading regulation clauses for version: {}", regulationVersion);
+    public List<RegulationClause> loadClauses(final UUID regulationId) {
+        log.info("Loading regulation clauses for version: {}", regulationId);
 
         final List<RegulationClause> clauses = regulationClauseRepository
-                .findByRegulationVersionOrderByClauseNumberAsc(regulationVersion);
+                .findByRegulationIdOrderByClauseNumberAsc(regulationId);
 
-        log.info("Loaded {} clauses for regulation version {}", clauses.size(), regulationVersion);
+        log.info("Loaded {} clauses for regulation version {}", clauses.size(), regulationId);
 
         return clauses;
     }

@@ -1,5 +1,6 @@
 package com.unfinitas.backend.core.analysis.dto;
 
+import com.unfinitas.backend.core.llm.dto.ComplianceResult;
 import java.util.List;
 
 /**
@@ -11,7 +12,8 @@ public record ClauseMatchResult(
         List<ParagraphMatch> matches,
         double bestSimilarity,
         MatchQuality quality,
-        String evidence
+        String evidence,
+        ComplianceResult complianceResult
 ) {
     public enum MatchQuality {
         EXCELLENT,      // ≥90%
