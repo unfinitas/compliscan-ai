@@ -5,12 +5,12 @@ import { ProcessingStatus } from "./ProcessingStatus";
  */
 export interface DocumentStatusResponse {
   documentId: string;
-  fileName: string;
-  fileSize: number;
-  pageCount: number | null;
-  paragraphCount: number;
+  filename: string;
   status: ProcessingStatus;
   errorMessage: string | null;
-  createdAt: string;
+  totalParagraphs: number;
+  embeddedParagraphs: number;
+  embeddingComplete: boolean;
+  uploadedAt: string;
+  processedAt: string | null;
 }
-

@@ -41,8 +41,8 @@ export async function sendRequest(
 
 /**
  * Upload a file with FormData
- * @param moeId Optional moeId to include in the request
- * @param url API endpoint URL
+ * @param moeId Optional moeId to include in the request (not used for document upload)
+ * @param url API endpoint URL (should be full URL or relative path)
  * @param formData FormData containing the file
  * @returns ApiResponse with the parsed JSON response
  */
@@ -51,15 +51,19 @@ export async function uploadFile<T>(
   url: string,
   formData: FormData
 ): Promise<T> {
-  const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? "";
-  const fullUrl = url.startsWith("http")
-    ? url
-    : `${baseUrl.replace(/\/$/, "")}/${url.replace(/^\//, "")}`;
-
-  // Add moeId to FormData if provided
-  if (moeId) {
-    formData.append("moeId", moeId);
+  // Construct full URL if needed
+  let fullUrl: string;
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    fullUrl = url;
+  } else {
+    const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
+    const cleanBase = baseUrl.replace(/\/$/, "");
+    const cleanPath = url.replace(/^\//, "");
+    fullUrl = `${cleanBase}/${cleanPath}`;
   }
+
+  // Note: Backend only expects "file" parameter, not moeId
+  // moeId parameter is kept for API consistency but not sent to backend
 
   const response = await fetch(fullUrl, {
     method: "POST",
