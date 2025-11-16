@@ -25,7 +25,7 @@ export function FileUpload({
   onAnalysisComplete,
 }: FileUploadProps = {}) {
   const { toast } = useToast();
-  const { setMoeId, clearMoeId } = useMoeId();
+  const { moeId, setMoeId, clearMoeId } = useMoeId();
   const { setAnalysisId } = useDocument();
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -90,6 +90,18 @@ export function FileUpload({
   const handleAnalyze = useCallback(async () => {
     if (!file || !isUploaded || !documentId) return;
 
+    // Get moeId from Redux (should be set after document upload)
+    const currentMoeId = moeId || documentId;
+
+    if (!currentMoeId) {
+      toast({
+        title: "Configuration error",
+        description: "Document ID is not available. Please upload a document first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!config.defaultRegulationId) {
       toast({
         title: "Configuration error",
@@ -103,7 +115,8 @@ export function FileUpload({
 
     try {
       // Start the analysis via API
-      const response = await startAnalysis(documentId, config.defaultRegulationId);
+      // moeId comes from Redux, regulationVersion is sent in body from config
+      const response = await startAnalysis(currentMoeId);
 
       // Store the analysis ID in context
       setAnalysisId(response.analysisId);
@@ -119,11 +132,11 @@ export function FileUpload({
       if (onAnalysisComplete) {
         // The actual analysis data will be fetched separately when viewing results
         onAnalysisComplete({
-          moeId: documentId,
+          moeId: currentMoeId,
           analysisId: response.analysisId,
           totalRequirements: 0,
           compliance: [],
-          regulationVersion: "",
+          regulationVersion: config.regulationVersion,
         });
       }
     } catch (error) {
@@ -136,7 +149,7 @@ export function FileUpload({
         variant: "destructive",
       });
     }
-  }, [file, isUploaded, documentId, toast, onAnalysisComplete, setAnalysisId]);
+  }, [file, isUploaded, documentId, moeId, toast, onAnalysisComplete, setAnalysisId]);
 
   return (
     <div className="w-full">
@@ -148,29 +161,36 @@ export function FileUpload({
       </div>
 
       {!file ? (
-        <div className="rounded-lg border border-border bg-card/50 p-12 min-h-[400px] flex items-center justify-center">
-          <Dropzone
-            onDrop={handleFileUpload}
-            onError={(error) => {
-              toast({
-                title: "Upload error",
-                description: error.message,
-                variant: "destructive",
-              });
-            }}
-            accept={{
-              "application/pdf": [".pdf"],
-            }}
-            maxFiles={1}
-            className="border-dashed w-full h-full"
-          >
-            <div className="flex flex-col items-center justify-center">
-              <div className="flex size-16 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                <Upload className="h-8 w-8" />
-              </div>
+        <Dropzone
+          onDrop={handleFileUpload}
+          onError={(error) => {
+            toast({
+              title: "Upload error",
+              description: error.message,
+              variant: "destructive",
+            });
+          }}
+          accept={{
+            "application/pdf": [".pdf"],
+          }}
+          maxFiles={1}
+          maxSize={50 * 1024 * 1024} // 50 MB
+          className="w-full"
+        >
+          <div className="flex flex-col items-center justify-center gap-4 py-8">
+            <div className="flex size-16 items-center justify-center rounded-md bg-muted text-muted-foreground">
+              <Upload className="h-8 w-8" />
             </div>
-          </Dropzone>
-        </div>
+            <div className="text-center">
+              <p className="font-medium text-sm mb-1">
+                Drag and drop your PDF file here
+              </p>
+              <p className="text-xs text-muted-foreground">
+                or click to browse
+              </p>
+            </div>
+          </div>
+        </Dropzone>
       ) : (
         <div className="space-y-4">
           {isUploading ? (

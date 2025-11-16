@@ -7,6 +7,7 @@ import { ComplianceHeader } from "./ComplianceHeader";
 import { RequirementItem } from "./RequirementItem";
 import { getAnalysisOutcomes, getAnalysisReport } from "@/api/analysis/analysisApi";
 import { transformComplianceData } from "@/utils/transformComplianceData";
+import { useMoeId } from "@/utils/moeStore";
 import type { Requirement } from "@/types/compliance";
 
 interface ComplianceRequirementsContainerProps {
@@ -18,6 +19,7 @@ const ITEMS_PER_PAGE = 10;
 export function ComplianceRequirementsContainer({
   analysisId,
 }: ComplianceRequirementsContainerProps) {
+  const { moeId } = useMoeId();
   const [viewedItems, setViewedItems] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(0); // 0-indexed for API
   const [statusFilter, setStatusFilter] = useState<
@@ -37,7 +39,7 @@ export function ComplianceRequirementsContainer({
   // Fetch status counts from full report
   const fetchStatusCounts = useCallback(async () => {
     try {
-      const report = await getAnalysisReport(analysisId);
+      const report = await getAnalysisReport(analysisId, moeId);
       const counts = {
         full: 0,
         partial: 0,
@@ -55,7 +57,7 @@ export function ComplianceRequirementsContainer({
       console.error("Failed to fetch status counts:", err);
       // Don't fail the whole component if status counts fail
     }
-  }, [analysisId]);
+  }, [analysisId, moeId]);
 
   // Fetch paginated requirements
   const fetchRequirements = useCallback(async () => {
@@ -68,7 +70,9 @@ export function ComplianceRequirementsContainer({
         analysisId,
         currentPage,
         ITEMS_PER_PAGE,
-        complianceStatus
+        complianceStatus,
+        undefined,
+        moeId
       );
 
       const transformed = transformComplianceData(response.content);
@@ -83,7 +87,7 @@ export function ComplianceRequirementsContainer({
     } finally {
       setIsLoading(false);
     }
-  }, [analysisId, currentPage, statusFilter]);
+  }, [analysisId, currentPage, statusFilter, moeId]);
 
   // Initial load and when filter changes
   useEffect(() => {

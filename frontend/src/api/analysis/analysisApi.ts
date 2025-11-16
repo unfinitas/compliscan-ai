@@ -1,7 +1,8 @@
 "use client";
 
-import { sendRequestWithResponse, fetchRequest } from "@/utils/gateway";
+import { sendRequestWithResponse } from "@/utils/gateway";
 import { RequestEnum } from "@/utils/requestEnum";
+import { config } from "@/config/env";
 
 const API_BASE = `${
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080"
@@ -55,61 +56,59 @@ export interface ComplianceOutcomeDto {
 /**
  * Start a new compliance analysis
  *
- * @param moeId Document UUID
- * @param regulationId Regulation UUID
+ * @param moeId Document UUID (from Redux store - use useMoeId() hook to get it)
+ * @param regulationId Optional regulation UUID (defaults to config.defaultRegulationId)
  * @returns Analysis ID
+ *
+ * Note:
+ * - moeId should be obtained from Redux using useMoeId() hook
+ * - moeId is included in both URL query params and request body (via gateway)
+ * - regulationVersion is automatically included in the request body from config (NEXT_PUBLIC_REGULATION_VERSION)
+ * - regulationId is sent as query parameter (from NEXT_PUBLIC_DEFAULT_REGULATION_ID or passed parameter)
  */
 export async function startAnalysis(
   moeId: string,
-  regulationId: string
+  regulationId?: string
 ): Promise<StartAnalysisResponse> {
-  const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? "";
-  const url = `${baseUrl.replace(/\/$/, "")}/api/analysis?moeId=${moeId}&regulationId=${regulationId}`;
+  const regId = regulationId || config.defaultRegulationId;
+  const regulationVersion = config.regulationVersion;
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
+  if (!regId) {
     throw new Error(
-      `Failed to start analysis: ${response.status} ${response.statusText}. ${errorText}`
+      "Regulation ID is not configured. Please set NEXT_PUBLIC_DEFAULT_REGULATION_ID in your .env.local file."
     );
   }
 
-  return response.json();
+  const url = `${API_BASE}?moeId=${moeId}&regulationId=${regId}`;
+
+  // Pass moeId to gateway - it will be added to the request body for POST requests
+  // moeId is also in the URL query params for @RequestParam
+  return sendRequestWithResponse<StartAnalysisResponse>(
+    moeId,
+    RequestEnum.POST,
+    url,
+    {
+      regulationVersion: regulationVersion,
+    }
+  );
 }
 
 /**
  * Get analysis report (all compliance outcomes without pagination)
  *
  * @param analysisId Analysis UUID
+ * @param moeId Optional moeId to include in the request
  * @returns Full analysis report
  */
 export async function getAnalysisReport(
-  analysisId: string
+  analysisId: string,
+  moeId: string | null = null
 ): Promise<AnalysisReportResponse> {
-  const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? "";
-  const url = `${baseUrl.replace(/\/$/, "")}/api/analysis/${analysisId}`;
-
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `Failed to get analysis report: ${response.status} ${response.statusText}. ${errorText}`
-    );
-  }
-
-  return response.json();
+  return sendRequestWithResponse<AnalysisReportResponse>(
+    moeId,
+    RequestEnum.GET,
+    `${API_BASE}/${analysisId}`
+  );
 }
 
 /**
@@ -120,6 +119,7 @@ export async function getAnalysisReport(
  * @param size Page size
  * @param complianceStatus Optional filter by status: "full", "partial", "non"
  * @param findingLevel Optional filter by finding level
+ * @param moeId Optional moeId to include in the request
  * @returns Paginated compliance outcomes
  */
 export async function getAnalysisOutcomes(
@@ -127,9 +127,9 @@ export async function getAnalysisOutcomes(
   page: number = 0,
   size: number = 20,
   complianceStatus?: "full" | "partial" | "non",
-  findingLevel?: string
+  findingLevel?: string,
+  moeId: string | null = null
 ): Promise<PageResponse<ComplianceOutcomeDto>> {
-  const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? "";
   const params = new URLSearchParams({
     page: page.toString(),
     size: size.toString(),
@@ -144,22 +144,9 @@ export async function getAnalysisOutcomes(
     params.append("findingLevel", findingLevel);
   }
 
-  const url = `${baseUrl.replace(/\/$/, "")}/api/analysis/${analysisId}/outcomes?${params.toString()}`;
-
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `Failed to get analysis outcomes: ${response.status} ${response.statusText}. ${errorText}`
-    );
-  }
-
-  return response.json();
+  return sendRequestWithResponse<PageResponse<ComplianceOutcomeDto>>(
+    moeId,
+    RequestEnum.GET,
+    `${API_BASE}/${analysisId}/outcomes?${params.toString()}`
+  );
 }
-
