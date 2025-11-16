@@ -88,3 +88,18 @@ compliscan-ai/
 - Reduced inspector workload
 
 ---
+## License
+
+This project is open-sourced under the Apache 2.0 License.
+
+Primary design, backend architecture, compliance analysis engine, embeddings pipeline, and UI/UX concept were created by Tan Anh Nguyen during the Traficom Challenge at Junction 2025.
+
+The core concept, system outline, and technical direction of CompliScan-AI originated from and were led by Tan Anh Nguyen.
+
+See [LICENSE](./LICENSE) for full legal terms.
+
+## Contributors
+
+Additional contributions in presentation and documentation by:
+- Chambit Oh
+- Luu Hoang Nhat Vi

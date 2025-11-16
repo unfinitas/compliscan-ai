@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Sparkles, X } from "lucide-react";
 import { useToast } from "@/hooks/useToast";
 import { Dropzone } from "@/components/ui/shadcn-io/dropzone";
@@ -9,10 +9,13 @@ import { HoverBorderGradient } from "@/components/ui/hover-border-gradient";
 import { Spinner } from "@/components/ui/shadcn-io/spinner";
 import type { FileRejection } from "react-dropzone";
 import { uploadDocument, pollDocumentStatus } from "@/api/upload/documentApi";
-import { useMoeId } from "@/utils/moeStore";
-import { startAnalysis, getAnalysisReport } from "@/api/analysis/analysisApi";
+import {
+  useMoeId,
+  getMoeIdFromStorage,
+  getAnalysisIdFromStorage,
+} from "@/utils/moeStore";
+import { startAnalysis } from "@/api/analysis/analysisApi";
 import { useDocument } from "@/contexts/DocumentContext";
-import { transformComplianceData } from "@/utils/transformComplianceData";
 import { UploadProgress } from "./progress";
 import type { AnalysisResponse } from "@/types/compliance";
 
@@ -48,8 +51,11 @@ export function FileUpload({
 }: FileUploadProps = {}) {
   const { toast } = useToast();
   const { moeId, setMoeId, clearMoeId } = useMoeId();
-  const { setAnalysisId, setIsAnalyzing: setContextIsAnalyzing } =
-    useDocument();
+  const {
+    analysisId,
+    setAnalysisId,
+    setIsAnalyzing: setContextIsAnalyzing,
+  } = useDocument();
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isUploaded, setIsUploaded] = useState(false);
@@ -57,6 +63,77 @@ export function FileUpload({
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [showProgress, setShowProgress] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+
+  // Check localStorage and Redux on mount to restore state
+  useEffect(() => {
+    const storedMoeId = getMoeIdFromStorage();
+    const storedAnalysisId = getAnalysisIdFromStorage();
+
+    // Restore moeId to Redux if it exists in localStorage
+    if (storedMoeId && !moeId) {
+      setMoeId(storedMoeId);
+    }
+
+    // Restore analysisId to context if it exists in localStorage
+    if (storedAnalysisId && !analysisId) {
+      setAnalysisId(storedAnalysisId);
+    }
+
+    // If moeId exists but no file uploaded, resume embedding
+    const currentMoeId = moeId || storedMoeId;
+    if (currentMoeId && !file && !isUploading && !isUploaded) {
+      // User refreshed during embedding, automatically resume
+      setDocumentId(currentMoeId);
+      setShowProgress(true);
+      setIsUploading(true);
+      setUploadProgress(0);
+
+      // Simulate random progress while waiting for status API
+      let simulatedProgress = 0;
+      const progressInterval = setInterval(() => {
+        // Random increment between 1-5%
+        const increment = Math.random() * 4 + 1;
+        simulatedProgress = Math.min(90, simulatedProgress + increment);
+        setUploadProgress(Math.round(simulatedProgress));
+      }, 500); // Update every 500ms for smooth animation
+
+      // Automatically call status API immediately and resume polling
+      // pollDocumentStatus starts polling immediately, so API is called right away
+      pollDocumentStatus(
+        currentMoeId,
+        currentMoeId,
+        (progress: number, status) => {
+          // Update progress based on actual API response
+          // Use the real progress from API, but keep simulation as fallback
+          if (progress > 0) {
+            clearInterval(progressInterval);
+            setUploadProgress(progress);
+          }
+
+          // When status API completes, jump to 100%
+          if (status.embeddingComplete || status.status === "COMPLETED") {
+            clearInterval(progressInterval);
+            setUploadProgress(100);
+          }
+        },
+        5000
+      )
+        .then(() => {
+          clearInterval(progressInterval);
+          setIsUploading(false);
+          setIsUploaded(true);
+          setShowProgress(false);
+          setUploadProgress(100);
+        })
+        .catch((error) => {
+          clearInterval(progressInterval);
+          setIsUploading(false);
+          setShowProgress(false);
+          console.error("Failed to resume embedding:", error);
+        });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run on mount
 
   const handleFileUpload = useCallback(
     async (acceptedFiles: File[], fileRejections: FileRejection[]) => {
@@ -89,17 +166,34 @@ export function FileUpload({
 
           onDocumentUploaded?.(response.documentId);
 
-          // Start polling status endpoint until embedding is 100% complete
-          // Endpoint: GET /api/moe/documents/{documentId}/status
           setUploadProgress(0);
-          await pollDocumentStatus(
-            response.documentId,
-            response.documentId,
-            (progress: number) => {
-              setUploadProgress(progress);
-            },
-            5000 // Poll every 5 seconds
-          );
+
+          // Simulate random progress while waiting for status API
+          let simulatedProgress = 0;
+          const progressInterval = setInterval(() => {
+            // Random increment between 1-5%
+            const increment = Math.random() * 4 + 1;
+            simulatedProgress = Math.min(90, simulatedProgress + increment);
+            setUploadProgress(Math.round(simulatedProgress));
+          }, 500); // Update every 500ms for smooth animation
+
+          try {
+            await pollDocumentStatus(
+              response.documentId,
+              response.documentId,
+              (progress: number, status) => {
+                // When status API completes, jump to 100%
+                if (status.embeddingComplete || status.status === "COMPLETED") {
+                  clearInterval(progressInterval);
+                  setUploadProgress(100);
+                }
+              },
+              5000 // Poll every 5 seconds
+            );
+          } finally {
+            // Clean up interval if polling completes
+            clearInterval(progressInterval);
+          }
 
           // Processing complete
           setIsUploading(false);
@@ -158,66 +252,13 @@ export function FileUpload({
     setIsAnalyzing(true);
     setContextIsAnalyzing(true);
 
-    try {
-      // Start the analysis via API immediately when button is clicked
-      // Backend only requires moeId as @RequestParam (no regulationId needed)
-      const response = await startAnalysis(currentMoeId);
+    // Start the analysis API call in the background (non-blocking)
+    // The analysis runs asynchronously on the backend, so we don't wait for it
+    startAnalysis(currentMoeId)
+      .then((response) => {
+        // Store the analysis ID in context immediately
+        setAnalysisId(response.analysisId);
 
-      // Store the analysis ID in context immediately
-      setAnalysisId(response.analysisId);
-
-      // Fetch the analysis report using the analysisId from the response
-      // The report contains all compliance data in the same format as mock.json
-      try {
-        const report = await getAnalysisReport(
-          response.analysisId,
-          currentMoeId
-        );
-
-        // Transform the compliance data to match component format (like mock.json)
-        const transformedCompliance = transformComplianceData(
-          report.compliance
-        );
-
-        // Stop loading state - data is ready
-        setIsAnalyzing(false);
-        setContextIsAnalyzing(false);
-
-        toast({
-          title: "Analysis complete",
-          description: `Found ${report.totalRequirements} compliance requirements.`,
-        });
-
-        // Notify parent if callback is provided with the actual report data
-        // Transform back to ComplianceRequirement format for the callback
-        if (onAnalysisComplete) {
-          const complianceForCallback = transformedCompliance.map((req) => ({
-            requirement_id: req.requirement_id,
-            compliance_status: req.compliance_status,
-            finding_level: req.finding_level,
-            justification: req.justification,
-            evidence: req.evidence.map((ev) => ({
-              moe_paragraph_id: ev.moe_paragraph_id,
-              relevant_excerpt: ev.relevant_excerpt,
-              similarity_score: ev.similarity_score,
-              rerank_score: ev.rerank_score,
-            })),
-            missing_elements: req.missing_elements,
-            recommended_actions: req.recommended_actions,
-          }));
-
-          onAnalysisComplete({
-            moeId: report.moeId,
-            analysisId: report.analysisId,
-            totalRequirements: report.totalRequirements,
-            compliance: complianceForCallback,
-            regulationVersion: report.regulationVersion,
-          });
-        }
-      } catch (reportError) {
-        // If report fetch fails, analysis might still be processing
-        // Keep loading state and show a message
-        console.warn("Analysis report not yet available:", reportError);
         toast({
           title: "Analysis started",
           description:
@@ -234,18 +275,22 @@ export function FileUpload({
             regulationVersion: "",
           });
         }
-      }
-    } catch (error) {
-      setIsAnalyzing(false);
-      setContextIsAnalyzing(false);
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to start analysis";
-      toast({
-        title: "Analysis failed",
-        description: errorMessage,
-        variant: "destructive",
+
+        // The analysis runs asynchronously on the backend
+        // The ComplianceRequirementsContainer will handle fetching the report
+        // when it's ready. We keep the loading state active.
+      })
+      .catch((error) => {
+        setIsAnalyzing(false);
+        setContextIsAnalyzing(false);
+        const errorMessage =
+          error instanceof Error ? error.message : "Failed to start analysis";
+        toast({
+          title: "Analysis failed",
+          description: errorMessage,
+          variant: "destructive",
+        });
       });
-    }
   }, [
     file,
     isUploaded,
@@ -356,6 +401,11 @@ export function FileUpload({
                     setIsAnalyzing(false);
                     setContextIsAnalyzing(false);
                     onFileNameChange?.(null);
+                    // Clear sessionStorage
+                    if (typeof window !== "undefined") {
+                      sessionStorage.removeItem("compliscan_moeId");
+                      sessionStorage.removeItem("compliscan_analysisId");
+                    }
                   }}
                   className="text-muted-foreground hover:text-foreground transition-colors ml-4 shrink-0 cursor-pointer hover:scale-110 active:scale-95"
                 >
