@@ -46,8 +46,8 @@ export type DropzoneProps = Omit<DropzoneOptions, 'onDrop'> & {
 
 export const Dropzone = ({
   accept,
-  maxFiles = 1,
-  maxSize,
+  maxFiles = 3,
+  maxSize=50 * 1024 * 1024, // 50 MB
   minSize,
   onDrop,
   onError,
