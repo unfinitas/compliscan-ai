@@ -89,12 +89,13 @@ export function FileUpload({
 
           onDocumentUploaded?.(response.documentId);
 
+          // Start polling status endpoint until embedding is 100% complete
+          // Endpoint: GET /api/moe/documents/{documentId}/status
           setUploadProgress(0);
           await pollDocumentStatus(
-            selectedFile,
             response.documentId,
             response.documentId,
-            (progress) => {
+            (progress: number) => {
               setUploadProgress(progress);
             },
             5000 // Poll every 5 seconds
