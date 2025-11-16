@@ -13,6 +13,7 @@ import com.unfinitas.backend.core.analysis.repository.AnalysisResultRepository;
 import com.unfinitas.backend.core.analysis.repository.ComplianceOutcomeRepository;
 import com.unfinitas.backend.core.ingestion.model.MoeDocument;
 import com.unfinitas.backend.core.ingestion.model.Paragraph;
+import com.unfinitas.backend.core.ingestion.model.ProcessingStatus;
 import com.unfinitas.backend.core.ingestion.repository.MoeDocumentRepository;
 import com.unfinitas.backend.core.ingestion.repository.ParagraphRepository;
 import com.unfinitas.backend.core.regulation.model.Regulation;
@@ -21,8 +22,10 @@ import com.unfinitas.backend.core.regulation.repository.RegulationRepository;
 import com.unfinitas.backend.core.regulation.service.RegulationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -51,11 +54,29 @@ public class ComplianceAnalysisEngine {
     @Transactional
     public UUID analyzeCompliance(final UUID moeId, final UUID regulationId) {
 
+        // 1. Validate MOE exists
         final MoeDocument moeDoc = moeDocRepo.findById(moeId)
-                .orElseThrow(() -> new IllegalArgumentException("MOE not found: " + moeId));
+                .orElseThrow(() ->
+                        new ResponseStatusException(HttpStatus.NOT_FOUND, "MOE not found: " + moeId));
 
+        if (moeDoc.getProcessingStatus() != ProcessingStatus.COMPLETED) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "MOE ingestion not completed. Current status: " + moeDoc.getProcessingStatus()
+            );
+        }
+
+        // 2. Validate regulation
         final Regulation regulation = regulationRepository.findById(regulationId)
-                .orElseThrow(() -> new IllegalArgumentException("Regulation not found: " + regulationId));
+                .orElseThrow(() ->
+                        new ResponseStatusException(HttpStatus.NOT_FOUND, "Regulation not found: " + regulationId));
+
+        if (!regulationService.allClausesEmbedded(regulation.getId())) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Regulation clauses not embedded yet. Please retry later."
+            );
+        }
 
         AnalysisResult analysis = AnalysisResult.builder()
                 .moeDocument(moeDoc)
@@ -74,23 +95,29 @@ public class ComplianceAnalysisEngine {
 
             final var semanticResult = semanticAnalyzer.analyze(moeParagraphs, clauses);
 
+            // Save coverage
             for (final ClauseMatchResult match : semanticResult.clauseMatches()) {
                 final CoverageResult cov = createCoverageResult(analysis, match);
                 analysis.addCoverageResult(cov);
             }
 
+            // Save compliance outcomes
             saveComplianceOutcomes(semanticResult, analysis);
 
+            // Gap detection
             final GapAnalysisResult gapResult = gapDetector.detectGaps(semanticResult, clauses);
             gapResult.gaps().forEach(analysis::addGapFinding);
 
+            // Questions
             final List<AuditorQuestion> questions = questionGenerator.generate(
                     analysis.getCoverageResults(), gapResult);
             questions.forEach(analysis::addQuestion);
 
+            // Decision support
             final DecisionSupportReport decision =
                     decisionGenerator.generate(analysis.getCoverageResults(), gapResult);
 
+            // Score
             final int total = clauses.size();
             final int covered = (int) analysis.getCoverageResults().stream()
                     .filter(c -> c.getStatus() == CoverageStatus.COVERED).count();
@@ -113,6 +140,10 @@ public class ComplianceAnalysisEngine {
             throw new RuntimeException("Analysis failed", e);
         }
     }
+
+    // =====================================================================================
+    // INTERNAL HELPERS
+    // =====================================================================================
 
     private void saveComplianceOutcomes(
             final SemanticAnalyzer.SemanticAnalysisResult semantic,
@@ -140,13 +171,14 @@ public class ComplianceAnalysisEngine {
     }
 
     private List<RegulationClause> filterPart145SectionA(final List<RegulationClause> all) {
-        return all.stream()
-                .filter(this::isPart145)
-                .toList();
+        return all.stream().filter(this::isPart145).toList();
     }
 
     private boolean isPart145(final RegulationClause c) {
-        return c.getClauseId() != null && c.getClauseId().contains("145");
+        if (c.getClauseId() == null || !c.getClauseId().contains("145")) return false;
+        if (c.getClauseType() == null) return false;
+        final String type = c.getClauseType().toUpperCase();
+        return type.equals("REQUIREMENT") || type.equals("AMC") || type.equals("GM");
     }
 
     private CoverageResult createCoverageResult(
@@ -193,8 +225,11 @@ public class ComplianceAnalysisEngine {
         return CoverageStatus.MISSING;
     }
 
-    private BigDecimal calculateComplianceScore(final int covered, final int partial, final int missing, final int total) {
+    private BigDecimal calculateComplianceScore(
+            final int covered, final int partial, final int missing, final int total) {
+
         if (total == 0) return BigDecimal.ZERO;
+
         final double score = ((covered * 1.0) + (partial * 0.5)) / total * 100;
         return BigDecimal.valueOf(score).setScale(2, RoundingMode.HALF_UP);
     }

@@ -6,6 +6,7 @@ import com.unfinitas.backend.core.analysis.model.AnalysisResult;
 import com.unfinitas.backend.core.analysis.model.ComplianceOutcome;
 import com.unfinitas.backend.core.analysis.repository.AnalysisResultRepository;
 import com.unfinitas.backend.core.analysis.repository.ComplianceOutcomeRepository;
+import com.unfinitas.backend.core.regulation.repository.RegulationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -16,39 +17,53 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 @RestController
 @RequestMapping("/api/analysis")
 @RequiredArgsConstructor
 @Slf4j
 public class AnalysisController {
+
     private final ComplianceAnalysisEngine analysisEngine;
     private final AnalysisResultRepository analysisRepo;
     private final ComplianceOutcomeRepository complianceOutcomeRepo;
+    private final RegulationRepository regulationRepo;
 
     @PostMapping
     public ResponseEntity<AnalysisResponse> startAnalysis(
-            @RequestParam final UUID moeId,
-            @RequestParam final UUID regulationId
+            @RequestParam final UUID moeId
     ) {
-        log.info("Starting analysis for MOE={} regulation={}", moeId, regulationId);
+        final long count = regulationRepo.count();
+
+        if (count == 0) {
+            return ResponseEntity.status(409)
+                    .body(new AnalysisResponse(null,
+                            "No regulation uploaded. Please upload regulation first."));
+        }
+
+        if (count > 1) {
+            return ResponseEntity.status(409)
+                    .body(new AnalysisResponse(null,
+                            "Multiple regulations exist. System expects exactly ONE regulation."));
+        }
+
+        final UUID regulationId = regulationRepo.findAll().getFirst().getId();
+
+        log.info("Auto-detected regulation {} for analysis", regulationId);
+
         final UUID analysisId = analysisEngine.analyzeCompliance(moeId, regulationId);
+
         return ResponseEntity.ok(new AnalysisResponse(analysisId, "Analysis started"));
     }
 
     @GetMapping
     public ResponseEntity<Page<Map<String, Object>>> listAnalyses(
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
-            Pageable pageable,
-            @RequestParam(required = false) UUID moeId,
-            @RequestParam(required = false) UUID regulationId
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) final Pageable pageable,
+            @RequestParam(required = false) final UUID moeId
     ) {
         return ResponseEntity.ok(
-                analysisRepo.findAllWithFetch(moeId, regulationId, pageable)
+                analysisRepo.findAllWithFetch(moeId, null, pageable)
                         .map(this::toDto)
         );
     }
@@ -71,6 +86,7 @@ public class AnalysisController {
             @RequestParam(required = false) final String findingLevel
     ) {
         final Page<ComplianceOutcome> outcomes;
+
         if (complianceStatus != null && findingLevel != null) {
             outcomes = complianceOutcomeRepo.findByAnalysisIdAndComplianceStatusAndFindingLevel(
                     id, complianceStatus, findingLevel, pageable);

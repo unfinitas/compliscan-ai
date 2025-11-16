@@ -125,7 +125,7 @@ public class MoeDocumentController {
                     .body(Map.of("error", "No paragraphs found for document"));
         }
 
-        embeddingService.generateParagraphEmbeddingsAsync(paragraphs);
+        embeddingService.generateParagraphEmbeddingsAsync(paragraphs, documentId);
 
         return ResponseEntity.accepted()
                 .body(Map.of(

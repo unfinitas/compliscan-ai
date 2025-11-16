@@ -8,10 +8,6 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * MOE (Maintenance Organization Exposition) Document entity
- * Immutable entity - once uploaded, never updated (except processing status)
- */
 @Entity
 @Table(name = "moe_documents")
 @Getter
@@ -44,7 +40,6 @@ public class MoeDocument {
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 
-    // Constructor for creating new MOE document
     public MoeDocument(String fileName, String filePath, Long fileSize) {
         this.fileName = fileName;
         this.filePath = filePath;
@@ -53,8 +48,6 @@ public class MoeDocument {
         this.createdAt = LocalDateTime.now();
     }
 
-    // Lifecycle callbacks
-
     @PrePersist
     protected void onCreate() {
         if (createdAt == null) {
@@ -62,23 +55,31 @@ public class MoeDocument {
         }
     }
 
-    // Domain methods
+    // --- STATE TRANSITIONS ---------------------------------------------------
 
     public void updatePageCount(int pageCount) {
         this.pageCount = pageCount;
     }
 
-    public void markAsCompleted() {
+    /** Called after paragraphs are extracted and saved */
+    public void markEmbedding() {
         if (this.processingStatus != ProcessingStatus.PROCESSING) {
-            throw new IllegalStateException("Can only mark PROCESSING documents as COMPLETED");
+            throw new IllegalStateException("Can only mark EMBEDDING from PROCESSING");
+        }
+        this.processingStatus = ProcessingStatus.EMBEDDING;
+    }
+
+    public void markAsCompleted() {
+        if (this.processingStatus != ProcessingStatus.EMBEDDING &&
+                this.processingStatus != ProcessingStatus.PROCESSING)
+        {
+            throw new IllegalStateException("Invalid transition to COMPLETED");
         }
         this.processingStatus = ProcessingStatus.COMPLETED;
     }
 
-    public void markAsFailed(String errorMessage) {
-        if (this.processingStatus != ProcessingStatus.PROCESSING) {
-            throw new IllegalStateException("Can only mark PROCESSING documents as FAILED");
-        }
+    /** Error state */
+    public void markAsFailed(final String errorMessage) {
         this.processingStatus = ProcessingStatus.FAILED;
         this.errorMessage = errorMessage;
     }

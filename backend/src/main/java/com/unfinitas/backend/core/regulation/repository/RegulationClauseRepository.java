@@ -10,7 +10,7 @@ import java.util.UUID;
 @Repository
 public interface RegulationClauseRepository extends JpaRepository<RegulationClause, UUID> {
 
-    List<RegulationClause> findByRegulationIdOrderByClauseNumberAsc(UUID regulationVersion);
+    List<RegulationClause> findByRegulationIdOrderByClauseNumberAsc(UUID regulationId);
 
     List<RegulationClause> findByEmbeddingIsNull();
 
@@ -18,5 +18,10 @@ public interface RegulationClauseRepository extends JpaRepository<RegulationClau
 
     int countByEmbeddingIsNull();
 
-    List<RegulationClause> findByRegulationId(UUID id);
+    List<RegulationClause> findByRegulationId(UUID regulationId);
+
+    long countByRegulationIdAndClauseTypeInAndEmbeddingIsNull(
+            UUID regulationId,
+            List<String> types
+    );
 }

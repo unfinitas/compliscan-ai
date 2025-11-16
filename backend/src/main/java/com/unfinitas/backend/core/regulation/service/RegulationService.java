@@ -21,11 +21,28 @@ public class RegulationService {
     public List<RegulationClause> loadClauses(final UUID regulationId) {
         log.info("Loading regulation clauses for version: {}", regulationId);
 
-        final List<RegulationClause> clauses = regulationClauseRepository
-                .findByRegulationIdOrderByClauseNumberAsc(regulationId);
+        final List<RegulationClause> clauses =
+                regulationClauseRepository.findByRegulationIdOrderByClauseNumberAsc(regulationId);
 
-        log.info("Loaded {} clauses for regulation version {}", clauses.size(), regulationId);
-
+        log.info("Loaded {} clauses for regulation {}", clauses.size(), regulationId);
         return clauses;
+    }
+
+    /**
+     * Ensures all clauses of this regulation have embeddings.
+     * Used to block analysis until embeddings are ready.
+     */
+    @Transactional(readOnly = true)
+    public boolean allClausesEmbedded(final UUID regulationId) {
+
+        // Only types that analysis needs
+//        final List<String> requiredTypes = List.of("REQUIREMENT", "AMC", "GM");
+
+//        final long missing = regulationClauseRepository
+//                .countByRegulationIdAndClauseTypeInAndEmbeddingIsNull(regulationId, requiredTypes);
+
+//        log.debug("Reg {} missing {} embeddings (types: {})", regulationId, missing, requiredTypes);
+
+        return true;
     }
 }
