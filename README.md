@@ -58,7 +58,7 @@ Each requirement analyzed with comprehensive JSON response data:
 
 ## Architecture
 
-<img width="1505" height="905" alt="Image" src="https://github.com/user-attachments/assets/3367cc4b-a696-41a0-94a8-4c297dd28f12" />
+<img width="1117" height="832" alt="Image" src="https://github.com/user-attachments/assets/d41c0439-58d2-4a0a-9569-c5c906ac831b" />
 
 ### Tech Stack
 - **Backend**: Java 21, Spring Boot 3.5.7
