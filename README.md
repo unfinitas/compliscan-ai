@@ -100,6 +100,8 @@ See [LICENSE](./LICENSE) for full legal terms.
 
 ## Contributors
 
+Frontend implementation:
+- Luu Hoang Nhat Vi
+
 Additional contributions in presentation and documentation by:
 - Chambit Oh
-- Luu Hoang Nhat Vi
